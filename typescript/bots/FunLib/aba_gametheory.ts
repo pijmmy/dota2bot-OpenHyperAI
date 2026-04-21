@@ -81,10 +81,15 @@ function getUltimate(bot: Unit): any {
             if (okA && ult !== null && !ult.IsNull()) return ult;
         }
     }
-    for (let slot = 0; slot <= 5; slot++) {
+    // Use ab.IsUltimate() which correctly identifies ults regardless of slot.
+    // Previous heuristic GetMaxLevel() <= 4 matched normal abilities too.
+    for (let slot = 0; slot <= 24; slot++) {
         const [okA, ab] = pcall(function () { return bot.GetAbilityInSlot(slot); });
-        if (okA && ab !== null && !ab.IsNull() && ab.IsTrained() && ab.GetMaxLevel() <= 4) {
-            return ab;
+        if (okA && ab !== null && !ab.IsNull()) {
+            const [okU, isUlt] = pcall(function () { return ab.IsUltimate(); });
+            if (okU && isUlt && ab.IsTrained()) {
+                return ab;
+            }
         }
     }
     return null;
