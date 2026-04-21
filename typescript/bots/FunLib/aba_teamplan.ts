@@ -108,6 +108,19 @@ function computePlan(bot: Unit): TeamPlan {
     const enemyTeam = GetOpposingTeam();
     const now = DotaTime();
 
+    // Pull adaptive thresholds from game theory if available.
+    let thresholds: any = {
+        commitAllyThreshold: 2,
+        pushAllyThreshold: 4,
+        roshAllyThreshold: 3,
+        tormentorLevelThreshold: 10,
+    };
+    const [okGT, gtMod] = pcall(require, GetScriptDirectory() + "/FunLib/aba_gametheory");
+    if (okGT && gtMod !== null) {
+        const [okT, t] = pcall(function () { return gtMod.GetThresholds(); });
+        if (okT && t !== null) thresholds = t;
+    }
+
     // 1. DEFEND_BASE: enemies near our Ancient
     const ourAncient = GetAncient(team);
     if (ourAncient) {
