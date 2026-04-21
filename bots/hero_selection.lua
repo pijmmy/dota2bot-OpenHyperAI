@@ -842,7 +842,19 @@ local function handleCommand(inputStr, PlayerID, bTeamOnly)
 				print("Hero name not found or not supported! See: https://github.com/forest0xia/dota2bot-OpenHyperAI/discussions/71");
 			end
 
-		elseif subKey == "!pos" and GetGameState() == GAME_STATE_PRE_GAME then
+		elseif subKey == "!pos" then
+			-- Allow during strategy time + pre-game + early in game in progress.
+			-- Hero selection is too early (roles not locked). After game starts,
+			-- swapping mid-game is allowed but warn — lane creeps/items already
+			-- committed to the original role.
+			local gs = GetGameState()
+			if gs ~= GAME_STATE_STRATEGY_TIME and gs ~= GAME_STATE_PRE_GAME and gs ~= GAME_STATE_GAME_IN_PROGRESS then
+				print('[!pos] Too early — wait until hero selection ends (strategy time or later).')
+				return
+			end
+			if gs == GAME_STATE_GAME_IN_PROGRESS and DotaTime() > 60 then
+				print('[!pos] Warning: game already in progress ' .. string.format('%.0f', DotaTime()) .. 's; lane creeps already set — swap anyway.')
+			end
 			print("Selecting pos " .. subVal)
 			local sTeamNameLocal = GetTeamForPlayer(PlayerID) == TEAM_RADIANT and 'TEAM_RADIANT' or 'TEAM_DIRE'
 			local remainingPos = RemainingPos[sTeamNameLocal]
@@ -874,7 +886,13 @@ local function handleCommand(inputStr, PlayerID, bTeamOnly)
 				print("Cannot select pos: " .. subVal..' (not available).')
 			end
 
-		elseif subKey:match("^!(%d+)pos$") ~= nil and GetGameState() == GAME_STATE_PRE_GAME then
+		elseif subKey:match("^!(%d+)pos$") ~= nil then
+			-- Same widened window as !pos.
+			local gs = GetGameState()
+			if gs ~= GAME_STATE_STRATEGY_TIME and gs ~= GAME_STATE_PRE_GAME and gs ~= GAME_STATE_GAME_IN_PROGRESS then
+				print('[!Xpos] Too early — wait until hero selection ends (strategy time or later).')
+				return
+			end
 			local x, y = inputStr:match("^!(%d+)pos (%d+)$")
 			if x and y then
 				print("Swap position for #" .. x .. " to play pos " .. y)
