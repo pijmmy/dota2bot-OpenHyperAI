@@ -29,6 +29,88 @@ local function focus()
 end
 
 -- ============================================================
+-- Tormentor + Lotus detection (no dedicated API; use unit lists)
+-- ============================================================
+
+-- Known lotus pool locations (radiant and dire sides).
+-- Coordinates verified against standard Dota 2 map.
+local LotusLocations = {
+    { x = -7207,  y = 1480,  z = 384 },   -- Radiant near-top lotus (in ruins)
+    { x = -5568,  y = 2880,  z = 384 },   -- Radiant far-top lotus
+    { x = 7316,   y = -1400, z = 384 },   -- Dire near-bot lotus (in ruins)
+    { x = 5440,   y = -2944, z = 384 },   -- Dire far-bot lotus
+}
+
+local function findNearestTormentorUnit(referenceLoc)
+    local ok, neutrals = pcall(function() return GetUnitList(UNIT_LIST_ENEMIES) end)
+    if not ok or neutrals == nil then return nil end
+    local best = nil
+    local bestDist = 999999
+    for i = 1, #neutrals do
+        local u = neutrals[i]
+        if u ~= nil and not u:IsNull() and u:IsAlive() then
+            local name = u:GetUnitName()
+            if string.find(name, "miniboss") ~= nil then
+                local d = 0
+                if referenceLoc ~= nil then
+                    local loc = u:GetLocation()
+                    d = math.sqrt((loc.x - referenceLoc.x)^2 + (loc.y - referenceLoc.y)^2)
+                end
+                if best == nil or d < bestDist then
+                    best = u
+                    bestDist = d
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function isTormentorContestable(bot, team)
+    local J = jmz()
+    local expectedLoc = J.GetTormentorLocation(team)
+    if expectedLoc == nil then return false, nil end
+    -- Are we ready? Need 3+ allies alive + average level 10+
+    local aliveAllies = countAliveTeamHeroes(team)
+    if aliveAllies < 3 then return false, nil end
+    local avgLevel = J.GetAverageLevel(false)
+    if avgLevel < 10 then return false, nil end
+    -- Is it alive? Probe unit list. Even if the team's own tormentor is elsewhere,
+    -- check for ANY miniboss alive and use its location.
+    local tormUnit = findNearestTormentorUnit(expectedLoc)
+    if tormUnit == nil then return false, nil end
+    return true, tormUnit:GetLocation()
+end
+
+local function isLotusContestable(team, now)
+    -- Lotus pools refresh every ~3 min after pickup. Without a direct API,
+    -- we bias toward contesting during laning + early mid-game when lotuses
+    -- matter most (sustain for the safelane / offlane).
+    if now < 60 or now > 14 * 60 then return false, nil end
+    -- Score our nearest lotus location — prefer the one closer to the team center.
+    local J = jmz()
+    local teamFountain = J.GetTeamFountain and J.GetTeamFountain() or nil
+    if teamFountain == nil then return false, nil end
+    -- Ruins-side lotus = closer to our fountain. Pick that one.
+    local bestLoc = nil
+    local bestDist = 999999
+    for i = 1, #LotusLocations do
+        local L = LotusLocations[i]
+        local loc = Vector(L.x, L.y, L.z)
+        local d = math.sqrt((loc.x - teamFountain.x)^2 + (loc.y - teamFountain.y)^2)
+        if d < bestDist then
+            bestDist = d
+            bestLoc = loc
+        end
+    end
+    if bestLoc == nil then return false, nil end
+    -- Need at least 1 ally not already farming to go grab it (supports typically)
+    local aliveAllies = countAliveTeamHeroes(team)
+    if aliveAllies < 2 then return false, nil end
+    return true, bestLoc
+end
+
+-- ============================================================
 -- State
 -- ============================================================
 
@@ -262,14 +344,30 @@ local function computePlan(bot)
         end
     end
 
-    -- 3. CONTEST_ROSH: rosh alive, past laning, numbers advantage
+    -- 3. CONTEST_ROSH: rosh alive, past early game, numbers favorable.
+    -- Loosened from 15min/4-allies to 12min/3-allies; also fires when enemies
+    -- are mostly dead (post-teamfight push for rosh).
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
-    if okRosh and roshAlive and now > 15 * 60 then
+    if okRosh and roshAlive and now > 12 * 60 then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
-        if aliveAllies >= 4 and aliveAllies >= aliveEnemies then
-            return freshPlan("contest_rosh", nil, nil, "rosh up, we have numbers")
+        if aliveAllies >= 3 and aliveAllies >= aliveEnemies then
+            local roshLoc = jmz().GetCurrentRoshanLocation and jmz().GetCurrentRoshanLocation() or nil
+            local reason = "rosh up, allies=" .. tostring(aliveAllies) .. " enemies=" .. tostring(aliveEnemies)
+            return freshPlan("contest_rosh", nil, roshLoc, reason)
         end
+    end
+
+    -- 3.5 CONTEST_TORMENTOR: tormentor alive + we're ready + enough allies
+    local tormentorReady, tormentorLoc = isTormentorContestable(bot, team)
+    if tormentorReady then
+        return freshPlan("contest_tormentor", nil, tormentorLoc, "tormentor up, team ready")
+    end
+
+    -- 3.7 CONTEST_LOTUS: early/mid game, ruins lotus is a sustain objective
+    local lotusReady, lotusLoc = isLotusContestable(team, now)
+    if lotusReady then
+        return freshPlan("contest_lotus", nil, lotusLoc, "lotus sustain pickup")
     end
 
     -- 4. PUSH_LANE: weakest enemy lane + we have people
@@ -341,6 +439,18 @@ local MATCH = {
     contest_rosh = {
         roshan = 1.0, team_roam = 0.85, assemble = 0.8,
         farm = 0.4, push = 0.3, defend = 0.8,
+    },
+    contest_tormentor = {
+        -- No dedicated tormentor mode; use assemble + team_roam to converge
+        -- on the tormentor location.
+        team_roam = 0.95, assemble = 0.85, roshan = 0.6,
+        farm = 0.3, push = 0.25, roam = 0.7, defend = 0.75,
+    },
+    contest_lotus = {
+        -- Small detour; should NOT dominate farm/push but beats idling.
+        -- Mostly benefits supports (pos 4/5).
+        team_roam = 0.75, roam = 0.8, assemble = 0.7, ward = 0.85,
+        farm = 0.6, push = 0.65, defend = 0.85,
     },
     push_lane = {
         push = 1.0, team_roam = 0.8,

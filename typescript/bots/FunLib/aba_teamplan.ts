@@ -41,6 +41,8 @@ export type Intent =
     | "defend_lane"
     | "commit_kill"
     | "contest_rosh"
+    | "contest_tormentor"
+    | "contest_lotus"
     | "push_lane"
     | "smoke_gank"
     | "regroup"
@@ -348,6 +350,14 @@ const MATCH: Record<Intent, Partial<Record<ModeKey, number>>> = {
     contest_rosh: {
         roshan: 1.0, team_roam: 0.85, assemble: 0.8,
         farm: 0.4, push: 0.3, defend: 0.8,
+    },
+    contest_tormentor: {
+        team_roam: 0.95, assemble: 0.85, roshan: 0.6,
+        farm: 0.3, push: 0.25, roam: 0.7, defend: 0.75,
+    },
+    contest_lotus: {
+        team_roam: 0.75, roam: 0.8, assemble: 0.7, ward: 0.85,
+        farm: 0.6, push: 0.65, defend: 0.85,
     },
     push_lane: {
         push: 1.0, team_roam: 0.8,
