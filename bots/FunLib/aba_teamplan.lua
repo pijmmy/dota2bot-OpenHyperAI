@@ -300,6 +300,25 @@ local function teamIsWeak(team)
     return total >= 2 and lowCount >= math.ceil(total * 0.5)
 end
 
+-- Count enemies whose last-seen is stale (>= staleSeconds). High stale count
+-- often means they're smoked up or rotating — likely gank incoming.
+local function countMissingEnemies(enemyTeam, staleSeconds)
+    local players = GetTeamPlayers(enemyTeam)
+    local missing = 0
+    for i = 1, #players do
+        local pid = players[i]
+        if IsHeroAlive(pid) then
+            local info = GetHeroLastSeenInfo(pid)
+            if info == nil or info[1] == nil then
+                missing = missing + 1
+            elseif info[1].time_since_seen == nil or info[1].time_since_seen >= staleSeconds then
+                missing = missing + 1
+            end
+        end
+    end
+    return missing
+end
+
 -- ============================================================
 -- Intent computation
 -- ============================================================
@@ -426,6 +445,15 @@ local function computePlan(bot)
         local grouped = countGroupedAllies(team)
         if grouped >= 3 then
             return freshPlan("smoke_gank", nil, nil, "grouped, look for picks")
+        end
+    end
+
+    -- 5.5 MISSING ENEMIES: 3+ enemies haven't been seen in >8s after minute 5
+    -- usually means a smoke/rotation incoming. Bias to regroup defensively.
+    if now > 5 * 60 then
+        local missing = countMissingEnemies(enemyTeam, 8)
+        if missing >= 3 then
+            return freshPlan("regroup", nil, nil, "enemies missing=" .. tostring(missing) .. " (likely smoke/rotation)")
         end
     end
 
