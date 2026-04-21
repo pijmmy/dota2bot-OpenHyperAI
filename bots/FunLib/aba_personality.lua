@@ -30,6 +30,16 @@ local function getJmz()
     return _jmz
 end
 
+-- Lazy-loaded game theory module.
+local _gt = nil
+local function getGameTheory()
+    if _gt == nil then
+        local ok, g = pcall(require, GetScriptDirectory().."/FunLib/aba_gametheory")
+        if ok then _gt = g end
+    end
+    return _gt
+end
+
 -- Constants
 local NOISE_STDDEV = 0.12
 local TILT_UPDATE_INTERVAL = 3.0
@@ -293,8 +303,17 @@ function ____exports.ModulateDesire(bot, desire, mode)
     local mult = computeMultiplier(mode, p)
     desire = desire * mult
 
-    -- Finally, role-based scaling (pro-match farm priority)
+    -- Role-based scaling (pro-match farm priority)
     desire = applyRoleScale(mode, bot, desire)
+
+    -- Game-theory pressure bias (aggressive when ahead, safer when behind)
+    local gt = getGameTheory()
+    if gt ~= nil then
+        local okBias, bias = pcall(function() return gt.GetPressureBias(mode) end)
+        if okBias and type(bias) == "number" then
+            desire = desire * bias
+        end
+    end
 
     return desire
 end

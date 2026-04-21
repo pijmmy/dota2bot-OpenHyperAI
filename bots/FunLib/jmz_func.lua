@@ -73,6 +73,21 @@ else
     }
 end
 
+-- Game theory (networth pressure, ult readiness, adaptive thresholds).
+local okGT, GameTheoryModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_gametheory')
+if okGT and GameTheoryModule then
+    J.GameTheory = GameTheoryModule
+else
+    print('[WARN] aba_gametheory not loaded: '..tostring(GameTheoryModule))
+    J.GameTheory = {
+        GetStrategicPressure = function() return 0 end,
+        GetUltReadiness = function() return 0 end,
+        GetThresholds = function() return { commitAllyThreshold=2, pushAllyThreshold=4, roshAllyThreshold=3, tormentorLevelThreshold=10, pressure=0, ultReady=0 } end,
+        GetPressureBias = function(_) return 1.0 end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 -- Team plan layer. Same pcall fallback pattern.
 local okTeamPlan, TeamPlanModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_teamplan')
 if okTeamPlan and TeamPlanModule then

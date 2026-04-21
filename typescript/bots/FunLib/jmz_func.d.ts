@@ -156,3 +156,13 @@ interface IFocus {
     Describe(): string;
 }
 declare const Focus: IFocus;
+
+/** @noSelf **/
+interface IGameTheory {
+    GetStrategicPressure(): number;
+    GetUltReadiness(): number;
+    GetThresholds(): any;
+    GetPressureBias(mode: string): number;
+    Describe(): string;
+}
+declare const GameTheory: IGameTheory;

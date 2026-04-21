@@ -28,6 +28,16 @@ local function focus()
     return _focus
 end
 
+-- Game theory module (adaptive thresholds based on networth/level).
+local _gt = nil
+local function gt()
+    if _gt == nil then
+        local ok, g = pcall(require, GetScriptDirectory().."/FunLib/aba_gametheory")
+        if ok then _gt = g end
+    end
+    return _gt
+end
+
 -- ============================================================
 -- Tormentor + Lotus detection (no dedicated API; use unit lists)
 -- ============================================================
@@ -224,9 +234,10 @@ local function findThreatenedLane(team)
     return nil
 end
 
-local function findPushTarget(enemyTeam, team)
+local function findPushTarget(enemyTeam, team, threshold)
     local aliveAllies = countAliveTeamHeroes(team)
-    if aliveAllies < 4 then return nil end
+    local req = threshold or 4
+    if aliveAllies < req then return nil end
     local lanes = { LANE_TOP, LANE_MID, LANE_BOT }
     local bestLane = nil
     local bestLoc = nil
@@ -305,6 +316,19 @@ local function computePlan(bot)
     local enemyTeam = GetOpposingTeam()
     local now = DotaTime()
 
+    -- Pull adaptive thresholds from game theory if available (falls back to defaults).
+    local thresholds = {
+        commitAllyThreshold = 2,
+        pushAllyThreshold = 4,
+        roshAllyThreshold = 3,
+        tormentorLevelThreshold = 10,
+    }
+    local gtMod = gt()
+    if gtMod ~= nil then
+        local ok, t = pcall(function() return gtMod.GetThresholds() end)
+        if ok and t ~= nil then thresholds = t end
+    end
+
     -- 1. DEFEND_BASE: enemies near our Ancient
     local ourAncient = GetAncient(team)
     if ourAncient ~= nil then
@@ -340,9 +364,9 @@ local function computePlan(bot)
             if target ~= nil and target.unit ~= nil and now < target.validUntil then
                 local focusLoc = target.unit:GetLocation()
                 local nearAllies = jmz().GetAlliesNearLoc(focusLoc, 2000)
-                if nearAllies ~= nil and #nearAllies >= 2 then
+                if nearAllies ~= nil and #nearAllies >= thresholds.commitAllyThreshold then
                     return freshPlan("commit_kill", nil, focusLoc,
-                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies))
+                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(thresholds.commitAllyThreshold))
                 end
                 -- Lane-gank path: laning phase + low-HP focus + at least 1 close ally
                 local okLaning, isLaning = pcall(function() return jmz().IsInLaningPhase() end)
@@ -367,9 +391,9 @@ local function computePlan(bot)
     if okRosh and roshAlive and now > 12 * 60 then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
-        if aliveAllies >= 3 and aliveAllies >= aliveEnemies then
+        if aliveAllies >= thresholds.roshAllyThreshold and aliveAllies >= aliveEnemies then
             local roshLoc = jmz().GetCurrentRoshanLocation and jmz().GetCurrentRoshanLocation() or nil
-            local reason = "rosh up, allies=" .. tostring(aliveAllies) .. " enemies=" .. tostring(aliveEnemies)
+            local reason = "rosh up, allies=" .. tostring(aliveAllies) .. "/" .. tostring(thresholds.roshAllyThreshold)
             return freshPlan("contest_rosh", nil, roshLoc, reason)
         end
     end
@@ -386,8 +410,8 @@ local function computePlan(bot)
         return freshPlan("contest_lotus", nil, lotusLoc, "lotus sustain pickup")
     end
 
-    -- 4. PUSH_LANE: weakest enemy lane + we have people
-    local pushTarget = findPushTarget(enemyTeam, team)
+    -- 4. PUSH_LANE: weakest enemy lane + we have people (threshold adapts to pressure)
+    local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
     if pushTarget ~= nil then
         return freshPlan("push_lane", pushTarget.lane, pushTarget.loc, "push weakest lane")
     end

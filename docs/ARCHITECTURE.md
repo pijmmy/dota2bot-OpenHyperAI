@@ -26,6 +26,7 @@ Last verified against: **Patch 7.41a** (March 2026)
 16. [Team Plan Layer](#16-team-plan-layer)
 17. [Defend Tuning (PR 3)](#17-defend-tuning-pr-3)
 18. [Focus Target + Kill Commit](#18-focus-target--kill-commit)
+19. [Game Theory Layer](#19-game-theory-layer)
 
 ---
 
@@ -710,3 +711,63 @@ Because this rides on top of the team-plan bias, each bot's `teamSpirit` still g
 ### Hook point for hero-specific use
 
 Hero logic (Consider functions in `BotLib/hero_*.lua`) can call `J.Focus.GetFocusIfInRange(bot, maxRange)` to prefer the team's focus as an attack target, falling back to their normal target-picking if the focus isn't near. Not adopted everywhere yet — future work.
+
+---
+
+## 19. Game Theory Layer
+
+Adaptive strategy — the team plan's intent thresholds and per-mode desire multipliers respond to networth, level, and ult availability. Bots press harder when winning, play safer when losing, commit more readily when they have ults up.
+
+### Files
+
+| File | Role |
+|------|------|
+| `typescript/bots/FunLib/aba_gametheory.ts` | TS source |
+| `bots/FunLib/aba_gametheory.lua` | Hand-written Lua mirror |
+
+### Signals
+
+- **Strategic pressure** in [-1..+1] = 70% networth delta + 30% level delta. Recomputed every 2s.
+- **Ult readiness** = count of team members with their ult (slot 5) off cooldown AND enough mana to cast.
+
+### Adaptive thresholds (`GetThresholds`)
+
+The team plan pulls these at compute time instead of hardcoding:
+
+| Threshold | Pressure > +0.3 (ahead) | Even | Pressure < −0.3 (behind) |
+|-----------|-------------------------|------|---------------------------|
+| commit_kill allies needed | 1 | 2 | 3 |
+| push_lane allies alive | 3 | 4 | 5 |
+| contest_rosh allies alive | 2 | 3 | 4 |
+
+Plus ult-heavy bonus: if `ultReady >= 3`, commit/push thresholds each drop by 1 (team with 3 big ults available can commit with fewer bodies). If `ultReady == 0`, commit threshold goes up by 1 (naked team plays safer).
+
+### Pressure bias (`GetPressureBias`)
+
+Applied as the final polish in `J.Personality.ModulateDesire` — multiplies mode desire by `1 + pressure * (target - 1)`:
+
+| Mode | Target (at pressure = +1) | At pressure = 0 | At pressure = −1 |
+|------|----------------------------|-----------------|-------------------|
+| push | 1.15× | 1.0× | 0.85× |
+| team_roam / roam | 1.10× | 1.0× | 0.90× |
+| roshan | 1.15× | 1.0× | 0.85× |
+| retreat | 0.90× | 1.0× | 1.10× |
+| farm | 0.95× | 1.0× | 1.05× |
+
+So a team 15k ahead pushes 15% harder and retreats 10% less. A team 15k behind farms 5% more and retreats 10% more — natural comeback pacing.
+
+### Combined stack order
+
+`J.Personality.ModulateDesire` now applies, in order:
+
+1. **Team plan bias** (commit_kill, push_lane, etc., via GetPlanBias)
+2. **Personality multiplier** (hero archetype + per-bot random noise)
+3. **Role scaling** (pos 1 farms, pos 5 roams)
+4. **Pressure bias** (ahead = aggro, behind = safe)
+
+Extremes compound multiplicatively but each layer is moderate, so typical final multipliers stay in 0.3–2.0× range.
+
+### Debug
+
+- `J.GameTheory.Describe()` → `"pressure=+0.24 ultReady=2 commit>=2 push>=4 rosh>=3"`
+- Call at any time to see how the game state is shaping decisions.
