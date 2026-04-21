@@ -142,6 +142,20 @@ function Think()
     if J.CanNotUseAction(bot) then return end
 	if J.Utils.IsBotThinkingMeaningfulAction(bot, Customize.ThinkLess, "roam") then return end
 
+	-- Focus attack-target override: when commit_kill or lane_gank is active,
+	-- attack the team's priority enemy if in range. Without this the bot's
+	-- own target-picking can pick a nearer but less-valuable enemy or a
+	-- creep, and the coordinated kill doesn't happen.
+	local plan = J.TeamPlan and J.TeamPlan.GetCurrentPlan and J.TeamPlan.GetCurrentPlan() or nil
+	if plan ~= nil and (plan.intent == 'commit_kill' or plan.intent == 'lane_gank')
+	   and plan.validUntil ~= nil and DotaTime() < plan.validUntil then
+		local focusedTarget = J.Focus and J.Focus.GetFocusIfInRange and J.Focus.GetFocusIfInRange(bot, 1400) or nil
+		if focusedTarget ~= nil and J.IsValid(focusedTarget) then
+			bot:Action_AttackUnit(focusedTarget, true)
+			return
+		end
+	end
+
 	nInRangeEnemy = bot:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
 
 	ThinkIndividualRoaming() -- unit special abilities

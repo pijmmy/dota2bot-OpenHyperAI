@@ -297,6 +297,20 @@ function Think()
 	-- diabled think less to avoid failing to last hit
     -- if J.Utils.IsBotThinkingMeaningfulAction(bot, Customize.ThinkLess, "team_roam") then return end
 
+    -- Focus attack-target override: when the team plan is commit_kill, bots
+    -- have been converging on a priority enemy. Without this, the bot's
+    -- existing target-picking can attack creeps or weaker-but-closer heroes
+    -- instead of committing to the kill. Force-attack the focus if in range.
+    local plan = J.TeamPlan and J.TeamPlan.GetCurrentPlan and J.TeamPlan.GetCurrentPlan() or nil
+    if plan ~= nil and (plan.intent == 'commit_kill' or plan.intent == 'lane_gank')
+       and plan.validUntil ~= nil and DotaTime() < plan.validUntil then
+        local focusedTarget = J.Focus and J.Focus.GetFocusIfInRange and J.Focus.GetFocusIfInRange(bot, 1400) or nil
+        if focusedTarget ~= nil and X.CanBeAttacked(focusedTarget) then
+            bot:Action_AttackUnit(focusedTarget, true)
+            return
+        end
+    end
+
     ItemOpsThink()
 
 	if J.IsValid(hTargetCreep) then
