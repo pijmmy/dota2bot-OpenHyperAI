@@ -24,6 +24,8 @@ Last verified against: **Patch 7.41a** (March 2026)
 14. [TypeScript to Lua (TSTL) Relationship](#13-typescript-to-lua-tstl-relationship)
 15. [Personality System](#15-personality-system)
 16. [Team Plan Layer](#16-team-plan-layer)
+17. [Defend Tuning (PR 3)](#17-defend-tuning-pr-3)
+18. [Focus Target + Kill Commit](#18-focus-target--kill-commit)
 
 ---
 
@@ -664,3 +666,47 @@ Targeted fixes in `aba_defend.ts` / `aba_defend.lua` for three defend gates that
 3. **Tower abandonment threshold** (near `buildingTier === 1 && hp <= 0.15`) — previously abandoned any T1 at 15% HP regardless of situation, which was a big cause of the "feed at towers" complaint. Now requires BOTH low HP AND being outnumbered (`lEnemies > nEffAllies + 1`). Thresholds tightened to 10% / 7%.
 
 When regenerating from TSTL (`npm run build`), these changes come from `typescript/bots/FunLib/aba_defend.ts` — Lua was hand-synced to match.
+
+---
+
+## 18. Focus Target + Kill Commit
+
+Addresses the biggest gap in OHA's challenge: bots don't coordinate kills. You could extend safely before because no one smokes, converges, or commits a full combo. This system fixes that.
+
+### Files
+
+| File | Role |
+|------|------|
+| `typescript/bots/FunLib/aba_focus.ts` | TS source — focus target computation |
+| `bots/FunLib/aba_focus.lua` | Hand-written Lua mirror |
+
+### What it does
+
+1. **Focus target scoring**: Every 1.5s, score each enemy hero on:
+   - **Isolation** (weight 2.0) — no allies within 1500u = prime pick
+   - **Low HP** (weight 1.6) — vulnerable target
+   - **Reachability** (weight 0.6) — at least one of our heroes within 2200u
+   - **Core value** (weight 0.4) — cores > supports as kill priority
+2. **Publish focus**: Store the top scorer in `J.Focus.GetFocus()` with TTL 5s.
+3. **Team-plan trigger**: `aba_teamplan` checks focus during recompute. If focus exists AND ≥2 allies are within 2000u of the focus → intent flips to `commit_kill`.
+4. **Massive desire swing**: `commit_kill` match table drives `team_roam` and `roam` desires to 1.0 and farm desires to 0.15. Bots converge on the focus's location.
+
+### Priority
+
+`commit_kill` sits at priority 2.5 in the intent chain — above contest_rosh/push/farm, below defend_base/defend_lane. So a pickable focus beats farming/pushing but base defense always wins.
+
+### Personality interaction
+
+Because this rides on top of the team-plan bias, each bot's `teamSpirit` still gates compliance:
+
+- High-teamSpirit supports and initiators converge hard on the focus
+- Low-teamSpirit rats (Tinker, NP, Arc Warden) partially ignore — consistent with their archetype
+
+### Debugging
+
+- `J.Focus.Describe()` → `"npc_dota_hero_lina [isolated,low-hp score=3.42]"` or `"none"`
+- `J.TeamPlan.Describe()` → shows `commit_kill [focus=... allies=N]` when active
+
+### Hook point for hero-specific use
+
+Hero logic (Consider functions in `BotLib/hero_*.lua`) can call `J.Focus.GetFocusIfInRange(bot, maxRange)` to prefer the team's focus as an attack target, falling back to their normal target-picking if the focus isn't near. Not adopted everywhere yet — future work.

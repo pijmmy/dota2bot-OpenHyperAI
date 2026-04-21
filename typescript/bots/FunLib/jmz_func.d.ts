@@ -146,3 +146,13 @@ interface ITeamPlan {
     Describe(): string;
 }
 declare const TeamPlan: ITeamPlan;
+
+/** @noSelf **/
+interface IFocus {
+    GetFocus(): any;
+    MaybeRecompute(bot: Unit): any;
+    IsFocusTargetable(bot: Unit, maxRange: number): boolean;
+    GetFocusIfInRange(bot: Unit, maxRange: number): Unit | null;
+    Describe(): string;
+}
+declare const Focus: IFocus;

@@ -18,6 +18,16 @@ local function jmz()
     return _jmz
 end
 
+-- Focus module is also lazy to keep load order flexible.
+local _focus = nil
+local function focus()
+    if _focus == nil then
+        local ok, f = pcall(require, GetScriptDirectory().."/FunLib/aba_focus")
+        if ok then _focus = f end
+    end
+    return _focus
+end
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -228,6 +238,30 @@ local function computePlan(bot)
         return freshPlan("defend_lane", threat.lane, threat.loc, "lane under attack")
     end
 
+    -- 2.5 COMMIT_KILL: focus target exists + ≥2 allies near focus
+    -- This fires between defend and contest_rosh so a juicy pick takes priority
+    -- over farming/pushing but not over base defense.
+    local f = focus()
+    if f ~= nil then
+        local pickSelf = nil
+        for i = 1, 5 do
+            local m = GetTeamMember(i)
+            if m ~= nil and m:IsAlive() then pickSelf = m; break end
+        end
+        if pickSelf ~= nil then
+            f.MaybeRecompute(pickSelf)
+            local target = f.GetFocus()
+            if target ~= nil and target.unit ~= nil and now < target.validUntil then
+                local focusLoc = target.unit:GetLocation()
+                local nearAllies = jmz().GetAlliesNearLoc(focusLoc, 2000)
+                if nearAllies ~= nil and #nearAllies >= 2 then
+                    return freshPlan("commit_kill", nil, focusLoc,
+                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies))
+                end
+            end
+        end
+    end
+
     -- 3. CONTEST_ROSH: rosh alive, past laning, numbers advantage
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
     if okRosh and roshAlive and now > 15 * 60 then
@@ -297,6 +331,12 @@ local MATCH = {
     defend_lane = {
         defend = 1.0, retreat = 0.85, assemble = 0.85,
         farm = 0.4, roam = 0.3, push = 0.2, team_roam = 0.35, rune = 0.6, roshan = 0.3,
+    },
+    commit_kill = {
+        -- Everything converges on the target: team_roam and roam go high,
+        -- farm/retreat/defend drop hard. Defending is still allowed if needed.
+        team_roam = 1.0, roam = 1.0, assemble = 0.9,
+        farm = 0.15, push = 0.3, defend = 0.5, retreat = 0.3, rune = 0.2, roshan = 0.2, ward = 0.3,
     },
     contest_rosh = {
         roshan = 1.0, team_roam = 0.85, assemble = 0.8,

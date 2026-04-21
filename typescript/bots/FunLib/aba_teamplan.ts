@@ -39,6 +39,7 @@ declare function IsRoshanAlive(): boolean;
 export type Intent =
     | "defend_base"
     | "defend_lane"
+    | "commit_kill"
     | "contest_rosh"
     | "push_lane"
     | "smoke_gank"
@@ -117,6 +118,30 @@ function computePlan(bot: Unit): TeamPlan {
     const threatenedLane = findThreatenedLane(team);
     if (threatenedLane !== null) {
         return freshPlan("defend_lane", threatenedLane.lane, threatenedLane.loc, "lane under attack");
+    }
+
+    // 2.5 COMMIT_KILL: focus target exists + ≥2 allies near the focus.
+    // Fires between defend and contest_rosh so a juicy pick takes priority over
+    // farming/pushing but not over base defense.
+    const [okFocus, focusMod] = pcall(require, GetScriptDirectory() + "/FunLib/aba_focus");
+    if (okFocus && focusMod !== null) {
+        let pickSelf: Unit | null = null;
+        for (let i = 1; i <= 5; i++) {
+            const m = GetTeamMember(i);
+            if (m !== null && m.IsAlive()) { pickSelf = m; break; }
+        }
+        if (pickSelf !== null) {
+            focusMod.MaybeRecompute(pickSelf);
+            const target = focusMod.GetFocus();
+            if (target !== null && target.unit !== null && now < target.validUntil) {
+                const focusLoc = target.unit.GetLocation();
+                const nearAllies = jmz.GetAlliesNearLoc(focusLoc, 2000);
+                if (nearAllies !== null && nearAllies.length >= 2) {
+                    return freshPlan("commit_kill", undefined, focusLoc,
+                        "focus=" + (target.reason || "?") + " allies=" + tostring(nearAllies.length));
+                }
+            }
+        }
     }
 
     // 3. CONTEST_ROSH: rosh alive, past laning, we have numbers advantage or nothing else pressing
@@ -315,6 +340,10 @@ const MATCH: Record<Intent, Partial<Record<ModeKey, number>>> = {
     defend_lane: {
         defend: 1.0, retreat: 0.85, assemble: 0.85,
         farm: 0.4, roam: 0.3, push: 0.2, team_roam: 0.35, rune: 0.6, roshan: 0.3,
+    },
+    commit_kill: {
+        team_roam: 1.0, roam: 1.0, assemble: 0.9,
+        farm: 0.15, push: 0.3, defend: 0.5, retreat: 0.3, rune: 0.2, roshan: 0.2, ward: 0.3,
     },
     contest_rosh: {
         roshan: 1.0, team_roam: 0.85, assemble: 0.8,

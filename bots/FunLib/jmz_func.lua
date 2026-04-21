@@ -58,9 +58,22 @@ else
     }
 end
 
+-- Focus target system. Loaded before team-plan so commit_kill logic can see it.
+local okFocus, FocusModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_focus')
+if okFocus and FocusModule then
+    J.Focus = FocusModule
+else
+    print('[WARN] aba_focus not loaded: '..tostring(FocusModule))
+    J.Focus = {
+        GetFocus = function() return { unit=nil, playerID=-1, score=0, validUntil=0, reason='stub' } end,
+        MaybeRecompute = function(_) return { unit=nil, playerID=-1, score=0, validUntil=0, reason='stub' } end,
+        IsFocusTargetable = function(_, _) return false end,
+        GetFocusIfInRange = function(_, _) return nil end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 -- Team plan layer. Same pcall fallback pattern.
--- Note: aba_teamplan requires jmz_func (us), so the require happens *after* we've
--- populated the key J.X fields above — the partial J table is what it uses.
 local okTeamPlan, TeamPlanModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_teamplan')
 if okTeamPlan and TeamPlanModule then
     J.TeamPlan = TeamPlanModule

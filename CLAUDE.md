@@ -74,8 +74,16 @@ Per-bot personality traits that modulate mode desires + draft picks, so bots of 
 
 ## Team Plan Layer
 
-Single canonical team intent per tick (defend_base / defend_lane / contest_rosh / push_lane / smoke_gank / regroup / farm) — biases bot mode desires so the team acts coordinated rather than 5 independent agents. Integrated into `J.Personality.ModulateDesire`, so mode hooks get team-plan bias automatically.
+Single canonical team intent per tick (defend_base / defend_lane / **commit_kill** / contest_rosh / push_lane / smoke_gank / regroup / farm) — biases bot mode desires so the team acts coordinated rather than 5 independent agents. Integrated into `J.Personality.ModulateDesire`, so mode hooks get team-plan bias automatically.
 
 - Core: `bots/FunLib/aba_teamplan.lua` (+ TS source). Exposed as `J.TeamPlan.*`.
 - Bots with high `teamSpirit` follow the plan closely; low `teamSpirit` mostly ignore it (preserves individual variance).
 - See `docs/ARCHITECTURE.md` section 16.
+
+## Focus Target + Kill Commit
+
+Per-team priority enemy target based on isolation/HP/value; when ≥2 allies are near the focus, team-plan flips to `commit_kill` intent which massively biases team_roam/roam desires (bots converge on the target, farm/retreat desires drop).
+
+- Core: `bots/FunLib/aba_focus.lua` (+ TS source). Exposed as `J.Focus.*`.
+- Hook point for hero files: `J.Focus.GetFocusIfInRange(bot, range)` returns the team's focus if in range (for overriding attack target selection). Not yet adopted in hero files.
+- See `docs/ARCHITECTURE.md` section 18.
