@@ -23,6 +23,7 @@ Last verified against: **Patch 7.41a** (March 2026)
 13. [Common Pitfalls](#13-common-pitfalls)
 14. [TypeScript to Lua (TSTL) Relationship](#13-typescript-to-lua-tstl-relationship)
 15. [Personality System](#15-personality-system)
+16. [Team Plan Layer](#16-team-plan-layer)
 
 ---
 
@@ -608,3 +609,44 @@ Personality modulates mode desires via `J.Personality.ModulateDesire(bot, desire
 ### Debugging
 
 Call `J.Personality.Describe(bot)` from a `print()` to dump a bot's current personality state: archetype name + trait values + tilt.
+
+---
+
+## 16. Team Plan Layer
+
+A single canonical "team intent" per team per tick, used to bias mode desires so the 5 bots act like a team rather than 5 independent agents. Integrated into `J.Personality.ModulateDesire`, so existing mode hooks pick up team-plan bias automatically.
+
+### Files
+
+| File | Role |
+|------|------|
+| `typescript/bots/FunLib/aba_teamplan.ts` | TS source |
+| `bots/FunLib/aba_teamplan.lua` | Hand-written Lua mirror |
+
+### Intents (priority order)
+
+1. `defend_base` — enemies near our Ancient; everyone drops what they're doing
+2. `defend_lane` — a specific T1/T2 is under active attack
+3. `contest_rosh` — rosh alive, past 15min, numbers advantage
+4. `push_lane` — 4+ allies alive, weakest enemy lane
+5. `smoke_gank` — past 10min + 3+ allies grouped
+6. `regroup` — team low HP/mana; reset
+7. `farm` — default
+
+### How it integrates
+
+`J.TeamPlan.MaybeRecompute(bot)` is called from inside `J.Personality.ModulateDesire`. It has a 2-second rate limiter, so any bot calling desire-modulation keeps the plan fresh without per-bot coordination. The computed plan is stored at module scope and queried by `GetPlanBias(bot, mode, teamSpirit)` which returns a multiplier based on:
+
+1. **Match score**: how well this mode serves this intent (lookup table, 0..1)
+2. **teamSpirit weighting**: high teamSpirit → full compliance; low teamSpirit → ignore plan
+
+So a `teamSpirit=0.9` support bot will strongly follow the team plan, while a `teamSpirit=0.25` rat hero mostly does their own thing. This preserves personality variance.
+
+### Cycle avoidance
+
+`aba_teamplan` needs `jmz_func` helpers (`GetEnemiesNearLoc`, `IsRoshanAlive`, etc.) but `jmz_func.lua` itself requires `aba_teamplan`. To avoid load-time infinite recursion, `aba_teamplan.lua` uses a lazy `jmz()` helper that requires jmz_func on first use inside functions — never at module load.
+
+### Debugging
+
+- `J.TeamPlan.Describe()` returns current intent + lane + reason (e.g., `"defend_lane lane=2 [lane under attack]"`).
+- `J.TeamPlan.GetCurrentPlan()` returns the raw plan table for inspection.

@@ -76,6 +76,17 @@ interface TraitMultiplier {
 // of Lua hoisting behavior in the TSTL output.
 let fretBotsActive = false;
 
+// Lazy-loaded team plan module (avoids require cycle: jmz -> personality -> teamplan -> jmz).
+let _teamPlanModule: any = null;
+let _teamPlanTried = false;
+function getTeamPlan(): any {
+    if (_teamPlanTried) return _teamPlanModule;
+    _teamPlanTried = true;
+    const [ok, tp] = pcall(require, GetScriptDirectory() + "/FunLib/aba_teamplan");
+    if (ok && tp !== null) _teamPlanModule = tp;
+    return _teamPlanModule;
+}
+
 // ============================================================
 // Mode-to-trait modulation table
 //
@@ -272,15 +283,24 @@ function computeMultiplier(mode: ModeTag, p: BotPersonality): number {
  * Multiply a mode desire by the bot's personality factor for that mode.
  * Returns the adjusted desire. Caller handles any final capping.
  *
- * Also self-updates tilt as a side effect (cheap — has internal 3s rate limiter).
- * This way tilt stays fresh without needing a dedicated Think hook.
+ * Also self-updates tilt as a side effect (cheap — has internal 3s rate limiter)
+ * and applies team-plan bias if the team plan module is available.
  */
 export function ModulateDesire(bot: Unit, desire: number, mode: ModeTag): number {
     if (!bot || desire === null || desire === undefined) return desire;
-    // Don't touch zero/negative desires — no point amplifying nothing
     if (desire <= 0) return desire;
     UpdateTilt(bot);
     const p = GetEffective(bot);
+
+    // Apply team-plan bias first (team strategy layer)
+    const tp = getTeamPlan();
+    if (tp !== null) {
+        tp.MaybeRecompute(bot);
+        const planMult = tp.GetPlanBias(bot, mode, p.teamSpirit);
+        desire = desire * planMult;
+    }
+
+    // Then personality multiplier
     const mult = computeMultiplier(mode, p);
     return desire * mult;
 }

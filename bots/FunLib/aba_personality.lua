@@ -8,6 +8,18 @@ local GetArchetype = ____archetypes.GetArchetype
 -- Module-scope state
 local fretBotsActive = false
 
+-- Lazy-loaded team plan module (avoids require cycle: jmz -> personality -> teamplan -> jmz).
+-- Resolved on first ModulateDesire call.
+local _teamPlanModule = nil
+local _teamPlanTried = false
+local function getTeamPlan()
+    if _teamPlanTried then return _teamPlanModule end
+    _teamPlanTried = true
+    local ok, tp = pcall(require, GetScriptDirectory().."/FunLib/aba_teamplan")
+    if ok and tp ~= nil then _teamPlanModule = tp end
+    return _teamPlanModule
+end
+
 -- Constants
 local NOISE_STDDEV = 0.12
 local TILT_UPDATE_INTERVAL = 3.0
@@ -214,6 +226,7 @@ local function computeMultiplier(mode, p)
 end
 
 -- Multiply a mode desire by the bot's personality factor. Self-updates tilt.
+-- Also applies team-plan bias if the team plan module is available.
 -- Zero/negative desires pass through unchanged (gates stay as gates).
 function ____exports.ModulateDesire(bot, desire, mode)
     if bot == nil or desire == nil then return desire end
@@ -221,6 +234,16 @@ function ____exports.ModulateDesire(bot, desire, mode)
     if desire <= 0 then return desire end
     ____exports.UpdateTilt(bot)
     local p = ____exports.GetEffective(bot)
+
+    -- Apply team-plan bias first (team strategy layer)
+    local tp = getTeamPlan()
+    if tp ~= nil then
+        tp.MaybeRecompute(bot)
+        local planMult = tp.GetPlanBias(bot, mode, p.teamSpirit)
+        desire = desire * planMult
+    end
+
+    -- Then personality multiplier (individual variance on top of team strategy)
     local mult = computeMultiplier(mode, p)
     return desire * mult
 end

@@ -58,6 +58,22 @@ else
     }
 end
 
+-- Team plan layer. Same pcall fallback pattern.
+-- Note: aba_teamplan requires jmz_func (us), so the require happens *after* we've
+-- populated the key J.X fields above — the partial J table is what it uses.
+local okTeamPlan, TeamPlanModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_teamplan')
+if okTeamPlan and TeamPlanModule then
+    J.TeamPlan = TeamPlanModule
+else
+    print('[WARN] aba_teamplan not loaded: '..tostring(TeamPlanModule))
+    J.TeamPlan = {
+        GetCurrentPlan = function() return { intent='farm', validUntil=0, reason='stub' } end,
+        MaybeRecompute = function(_) return { intent='farm', validUntil=0, reason='stub' } end,
+        GetPlanBias = function(_, _, _) return 1.0 end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 
 function J.SetUserHeroInit( nAbilityBuildList, nTalentBuildList, sBuyList, sSellList )
 	-- A place to change the bot setup.

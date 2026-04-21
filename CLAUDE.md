@@ -71,3 +71,11 @@ Per-bot personality traits that modulate mode desires + draft picks, so bots of 
 - See `docs/ARCHITECTURE.md` section 15 for full details.
 
 **When tweaking hero playstyle**: edit the archetype override in `bots/FunLib/aba_hero_archetypes.lua` AND the TS source `typescript/bots/FunLib/aba_hero_archetypes.ts`. Keep them in sync -- if Node is installed and `npm run build` runs later, TSTL regeneration will otherwise overwrite hand edits.
+
+## Team Plan Layer
+
+Single canonical team intent per tick (defend_base / defend_lane / contest_rosh / push_lane / smoke_gank / regroup / farm) — biases bot mode desires so the team acts coordinated rather than 5 independent agents. Integrated into `J.Personality.ModulateDesire`, so mode hooks get team-plan bias automatically.
+
+- Core: `bots/FunLib/aba_teamplan.lua` (+ TS source). Exposed as `J.TeamPlan.*`.
+- Bots with high `teamSpirit` follow the plan closely; low `teamSpirit` mostly ignore it (preserves individual variance).
+- See `docs/ARCHITECTURE.md` section 16.

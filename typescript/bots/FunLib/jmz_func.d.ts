@@ -137,3 +137,12 @@ interface IPersonality {
     Describe(bot: Unit): string;
 }
 declare const Personality: IPersonality;
+
+/** @noSelf **/
+interface ITeamPlan {
+    GetCurrentPlan(): any;
+    MaybeRecompute(bot: Unit): any;
+    GetPlanBias(bot: Unit, mode: string, teamSpirit: number): number;
+    Describe(): string;
+}
+declare const TeamPlan: ITeamPlan;
