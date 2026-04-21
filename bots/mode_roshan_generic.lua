@@ -23,7 +23,7 @@ local Roshan
 function GetDesire()
 	local res = GetDesireHelper()
 	if res > 0.6 then J.ModeAnnounce(bot, 'say_roshan', 30) end
-	return res
+	return J.Personality.ModulateDesire(bot, res, 'roshan')
 end
 function GetDesireHelper()
 	if bot:IsInvulnerable() or not bot:IsHero() or not bot:IsAlive() or not string.find(botName, "hero") or bot:IsIllusion() then return BOT_MODE_DESIRE_NONE end

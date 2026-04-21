@@ -608,6 +608,8 @@ export function GetDefendDesire(bot: Unit, lane: Lane): BotModeDesire {
     // }
 
     // 2) compute and publish
+    // Personality modulation is applied in the mode wrapper (mode_defend_tower_*_generic.lua)
+    // rather than here — keeps the TS-generated file stable and lets pure-Lua hook evolve.
     const res = GetDefendDesireHelper(bot, lane);
     // jmz.Utils.SetCachedVars(cacheKey, res);
     (bot as any).defendDesire = res;

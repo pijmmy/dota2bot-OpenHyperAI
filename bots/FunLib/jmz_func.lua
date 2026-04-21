@@ -35,6 +35,29 @@ J.Chat = require( GetScriptDirectory()..'/FunLib/aba_chat' )
 J.Utils = require( GetScriptDirectory()..'/FunLib/utils' )
 J.Customize = require(GetScriptDirectory()..'/FunLib/custom_loader')
 
+-- Personality system (TS-generated). pcall-guarded so a failed build
+-- doesn't brick the whole script; hooks gracefully no-op when absent.
+local okPersonality, PersonalityModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_personality')
+if okPersonality and PersonalityModule then
+    J.Personality = PersonalityModule
+else
+    print('[WARN] aba_personality not loaded: '..tostring(PersonalityModule))
+    -- Stub that makes all hooks no-ops if the module didn't load
+    J.Personality = {
+        Get = function(_) return { aggression=0.5, greed=0.5, risk=0.5, independence=0.5, teamSpirit=0.5, tilt=0 } end,
+        GetEffective = function(_) return { aggression=0.5, greed=0.5, risk=0.5, independence=0.5, teamSpirit=0.5, tilt=0 } end,
+        ModulateDesire = function(_, desire, _) return desire end,
+        GetMultiplier = function(_, _) return 1.0 end,
+        UpdateTilt = function(_) end,
+        BumpTilt = function(_, _) end,
+        RollSlotProfile = function() return { aggression=0.5, greed=0.5, risk=0.5, independence=0.5, teamSpirit=0.5 } end,
+        GetDraftAffinity = function(_, _) return 0.5 end,
+        SetFretBotsMode = function(_) end,
+        IsFretBotsMode = function() return false end,
+        Describe = function(_) return 'default' end,
+    }
+end
+
 
 function J.SetUserHeroInit( nAbilityBuildList, nTalentBuildList, sBuyList, sSellList )
 	-- A place to change the bot setup.

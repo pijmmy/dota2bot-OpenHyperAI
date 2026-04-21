@@ -246,6 +246,8 @@ export function GetPushDesire(bot: Unit, lane: Lane): BotModeDesire {
     // }
 
     // 2) compute and publish
+    // Personality modulation is applied in the mode wrapper (mode_push_tower_*_generic.lua)
+    // rather than here — keeps the TS-generated file stable and lets pure-Lua hook evolve.
     const res = GetPushDesireHelper(bot, lane);
     // jmz.Utils.SetCachedVars(cacheKey, res);
     (bot as any).pushDesire = res;

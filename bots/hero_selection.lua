@@ -40,7 +40,20 @@ local heroUnitNames = require( GetScriptDirectory()..'/FretBots/HeroNames')
 local Customize = require(GetScriptDirectory()..'/FunLib/custom_loader')
 local okMatchupLib, HeroMatchups = pcall(require, GetScriptDirectory()..'/FunLib/aba_matchups')
 if not okMatchupLib then HeroMatchups = nil end
+local okPersonality, Personality = pcall(require, GetScriptDirectory()..'/FunLib/aba_personality')
+if not okPersonality then Personality = nil end
 HeroPositionMap = HeroPositionMap.GetHeroPositions()
+
+-- Roll one personality profile per draft slot, once per match. Each slot's
+-- "flavor" stays consistent within the match but varies across matches, so
+-- the same team composition feels different game-to-game. Profiles bias
+-- hero scoring via GetDraftAffinity.
+local DraftSlotProfiles = {}
+if Personality ~= nil then
+	for i = 1, 5 do
+		DraftSlotProfiles[i] = Personality.RollSlotProfile()
+	end
+end
 
 if GAMEMODE_TURBO == nil then GAMEMODE_TURBO = 23 end
 
@@ -643,6 +656,13 @@ local function ScoreCandidatesForTeam(team, rolePool, enemyNames, posIndex)
 			-- 4. Weak hero penalty
 			if Utils.HasValue(WeakHeroes, cand) then
 				score = score * weakPenalty
+			end
+
+			-- 5. Personality affinity: match hero archetype to this slot's rolled profile.
+			-- Range is roughly 0.7x..1.3x so it shifts the order without dominating counter/synergy.
+			if Personality ~= nil and posIndex and DraftSlotProfiles[posIndex] then
+				local affinity = Personality.GetDraftAffinity(cand, DraftSlotProfiles[posIndex])
+				score = score * (0.7 + 0.6 * affinity)
 			end
 
 			table.insert(list, { name = cand, score = score })

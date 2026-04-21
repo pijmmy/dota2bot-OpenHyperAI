@@ -60,6 +60,12 @@ function FretBots:Initialize()
 		Debug:Print('Initializing FretBots')
 		-- Randomize!
 		FretBots:SetRandomSeed()
+		-- Tell the personality system we're in FretBots mode (amplifies tilt effects).
+		local okPers, Personality = pcall(require, 'bots.FunLib.aba_personality')
+		if okPers and Personality ~= nil and Personality.SetFretBotsMode then
+			Personality.SetFretBotsMode(true)
+			Debug:Print('Personality system: FretBots mode engaged.')
+		end
 		-- Register the listener that will check for all players spawning and then init datatables
 		ListenToGameEvent('dota_on_hero_finish_spawn', Dynamic_Wrap(FretBots, 'OnPlayerSpawned'), FretBots)
 		Timers:CreateTimer(playersLoadedTimerName, {endTime = 1, callback = FretBots['PlayersLoadedTimer']} )

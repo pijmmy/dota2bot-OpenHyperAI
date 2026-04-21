@@ -121,3 +121,19 @@ declare function RandomForwardVector(distance: number): Vector;
 declare const Skill: ISkill;
 declare const Item: IItem;
 declare const Utils: typeof Util;
+
+/** @noSelf **/
+interface IPersonality {
+    Get(bot: Unit): any;
+    GetEffective(bot: Unit): any;
+    ModulateDesire(bot: Unit, desire: number, mode: string): number;
+    GetMultiplier(bot: Unit, mode: string): number;
+    UpdateTilt(bot: Unit): void;
+    BumpTilt(bot: Unit, amount: number): void;
+    RollSlotProfile(): any;
+    GetDraftAffinity(heroName: string, profile: any): number;
+    SetFretBotsMode(active: boolean): void;
+    IsFretBotsMode(): boolean;
+    Describe(bot: Unit): string;
+}
+declare const Personality: IPersonality;

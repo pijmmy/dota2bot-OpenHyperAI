@@ -58,3 +58,16 @@ When user says "update for patch X.XX" or provides patch notes:
 - **Always update BOTH neutral item files** (Buff/ AND FretBots/)
 - **Verify on Liquipedia** before trusting patch note summaries about ability names
 - **Test in-game** after changes -- some things can only be verified at runtime
+
+## Personality System
+
+Per-bot personality traits that modulate mode desires + draft picks, so bots of the same hero feel different across games and different heroes lean into natural playstyles (rats rat, fighters fight).
+
+- Core: `bots/FunLib/aba_personality.lua` (+ TS source). Exposed as `J.Personality.*`.
+- Archetypes: `bots/FunLib/aba_hero_archetypes.lua` -- 127-hero data, derived from role map with ~100 manual overrides.
+- Desire hooks: every pure-Lua mode file + `mode_push_tower_*` / `mode_defend_tower_*` wrappers modulate via `J.Personality.ModulateDesire(bot, desire, tag)`.
+- Draft bias: `hero_selection.lua` uses `J.Personality.GetDraftAffinity` as a 5th scoring factor.
+- FretBots: amplifies tilt effects x1.4 via `SetFretBotsMode(true)`.
+- See `docs/ARCHITECTURE.md` section 15 for full details.
+
+**When tweaking hero playstyle**: edit the archetype override in `bots/FunLib/aba_hero_archetypes.lua` AND the TS source `typescript/bots/FunLib/aba_hero_archetypes.ts`. Keep them in sync -- if Node is installed and `npm run build` runs later, TSTL regeneration will otherwise overwrite hand edits.

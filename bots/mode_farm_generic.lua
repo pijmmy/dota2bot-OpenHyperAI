@@ -60,7 +60,7 @@ function GetDesire()
 	-- if DotaTime() > 30 and cachedVar ~= nil then return cachedVar end
 	local res = GetDesireHelper()
 	-- J.Utils.SetCachedVars(cacheKey, res)
-	return res
+	return J.Personality.ModulateDesire(bot, res, 'farm')
 end
 
 function GetDesireHelper()
