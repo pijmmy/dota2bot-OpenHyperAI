@@ -400,6 +400,23 @@ function clamp01(v: number): number {
 export function GetPlanBias(bot: Unit, mode: string, teamSpirit: number): number {
     const plan = currentPlan;
     if (DotaTime() > plan.validUntil) return 1.0;
+
+    // Engagement override: if an enemy hero is within immediate attack range,
+    // don't bias away from combat. Otherwise commit_kill / push / etc. could
+    // push farm / team_roam desires high enough that the bot walks past an
+    // enemy right in front of it to chase the team target — unrealistic and
+    // exploitable. Neutralizing the bias here lets Valve's default
+    // attack_generic desire (which spikes on close enemies) win.
+    const [okEnemies, nearbyEnemies] = pcall(function (): Unit[] {
+        return jmz.GetNearbyHeroes(bot, 900, true, BotMode.None);
+    });
+    if (okEnemies && nearbyEnemies !== null && nearbyEnemies.length > 0) {
+        if (mode === "farm" || mode === "push" || mode === "team_roam" || mode === "roam"
+            || mode === "rune" || mode === "ward" || mode === "roshan") {
+            return 1.0;
+        }
+    }
+
     const m = getMatch(plan.intent, mode as ModeKey);
     const compliantMult = lerp(MIN_MULT, MAX_MULT, m);
     return 1.0 + clamp01(teamSpirit) * (compliantMult - 1.0);

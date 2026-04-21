@@ -388,6 +388,28 @@ end
 function ____exports.GetPlanBias(bot, mode, teamSpirit)
     local plan = currentPlan
     if DotaTime() > plan.validUntil then return 1.0 end
+
+    -- Engagement override: if there's an enemy hero in immediate attack range,
+    -- don't bias away from combat. Previously the commit_kill / push / etc. bias
+    -- could push farm/team_roam desire high enough that bots would walk past
+    -- an enemy hero in melee range to chase the team target — unrealistic and
+    -- exploitable. Here we neutralize the bias for non-combat modes when an
+    -- enemy is right in front of us, so Valve's default attack_generic desire
+    -- (which spikes when enemies are close) wins.
+    local okJmz, J = pcall(jmz)
+    if okJmz and J ~= nil and bot ~= nil then
+        local okEnemies, nearbyEnemies = pcall(function()
+            return J.GetNearbyHeroes(bot, 900, true, BOT_MODE_NONE)
+        end)
+        if okEnemies and nearbyEnemies ~= nil and #nearbyEnemies > 0 then
+            -- For modes that would pull the bot AWAY from the fight, bail to neutral.
+            if mode == "farm" or mode == "push" or mode == "team_roam" or mode == "roam"
+               or mode == "rune" or mode == "ward" or mode == "roshan" then
+                return 1.0
+            end
+        end
+    end
+
     local m = getMatch(plan.intent, mode)
     local compliantMult = lerp(MIN_MULT, MAX_MULT, m)
     return 1.0 + clamp01(teamSpirit) * (compliantMult - 1.0)
