@@ -59,6 +59,31 @@ end
 
 local ultCache = { value = 0, lastUpdate = -999 }
 
+-- Find a hero's ultimate ability. Ult slot isn't universal (Invoker, Meepo,
+-- Morphling etc. have non-standard layouts), so we use J.Skill.GetAbilityList
+-- which already handles the "ult at logical index 6" convention (see
+-- FunLib/aba_skill.lua). Falls back to slot scan if that isn't available.
+local function getUltimate(bot)
+    local J = jmz()
+    if J and J.Skill and J.Skill.GetAbilityList then
+        local ok, list = pcall(function() return J.Skill.GetAbilityList(bot) end)
+        if ok and type(list) == "table" and list[6] ~= nil then
+            local okA, ult = pcall(function() return bot:GetAbilityByName(list[6]) end)
+            if okA and ult ~= nil and not ult:IsNull() then return ult end
+        end
+    end
+    -- Fallback: scan slots 0..5 and return the highest-level trained ability
+    -- (heuristic; ults are typically trainable + have only 3-4 levels).
+    for slot = 0, 5 do
+        local okA, ab = pcall(function() return bot:GetAbilityInSlot(slot) end)
+        if okA and ab ~= nil and not ab:IsNull() and ab:IsTrained()
+           and ab:GetMaxLevel() <= 4 then
+            return ab
+        end
+    end
+    return nil
+end
+
 function ____exports.GetUltReadiness()
     local now = DotaTime()
     if now - ultCache.lastUpdate < RECOMPUTE_INTERVAL then
@@ -68,9 +93,8 @@ function ____exports.GetUltReadiness()
     for i = 1, 5 do
         local ok, m = pcall(function() return GetTeamMember(i) end)
         if ok and m ~= nil and m:IsAlive() then
-            -- Ult is always at slot 5 (index 5 in Lua 1-based, or via ability list index 6 by convention)
-            local okAbil, ult = pcall(function() return m:GetAbilityInSlot(5) end)
-            if okAbil and ult ~= nil and not ult:IsNull() and ult:IsTrained()
+            local ult = getUltimate(m)
+            if ult ~= nil and ult:IsTrained()
                and ult:GetCooldownTimeRemaining() < 2
                and m:GetMana() >= ult:GetManaCost() then
                 ready = ready + 1

@@ -49,7 +49,10 @@ local function countEnemyAlliesNearLoc(enemyTeam, excludePID, loc, radius)
         local pid = players[i]
         if pid ~= excludePID and IsHeroAlive(pid) then
             local info = GetHeroLastSeenInfo(pid)
-            if info ~= nil and info[1] ~= nil and info[1].time_since_seen <= LAST_SEEN_WINDOW then
+            if info ~= nil and info[1] ~= nil
+               and info[1].location ~= nil
+               and info[1].time_since_seen ~= nil
+               and info[1].time_since_seen <= LAST_SEEN_WINDOW then
                 local d = distanceLocLoc(info[1].location, loc)
                 if d <= radius then n = n + 1 end
             end
@@ -99,7 +102,10 @@ local function computeFocus()
         local pid = enemyPlayers[i]
         if IsHeroAlive(pid) then
             local info = GetHeroLastSeenInfo(pid)
-            if info ~= nil and info[1] ~= nil and info[1].time_since_seen <= LAST_SEEN_WINDOW then
+            if info ~= nil and info[1] ~= nil
+               and info[1].location ~= nil
+               and info[1].time_since_seen ~= nil
+               and info[1].time_since_seen <= LAST_SEEN_WINDOW then
                 local loc = info[1].location
 
                 -- Reachability: someone on our team within REACHABLE_RADIUS
@@ -177,14 +183,18 @@ function ____exports.MaybeRecompute(bot)
 end
 
 function ____exports.IsFocusTargetable(bot, maxRange)
+    if bot == nil then return false end
     local f = currentFocus
     if f.unit == nil or DotaTime() > f.validUntil then return false end
     local J = jmz()
     if not J.IsValidHero(f.unit) then return false end
-    return GetUnitToUnitDistance(bot, f.unit) <= maxRange
+    local ok, dist = pcall(function() return GetUnitToUnitDistance(bot, f.unit) end)
+    if not ok or dist == nil then return false end
+    return dist <= maxRange
 end
 
 function ____exports.GetFocusIfInRange(bot, maxRange)
+    if bot == nil then return nil end
     if not ____exports.IsFocusTargetable(bot, maxRange) then return nil end
     return currentFocus.unit
 end

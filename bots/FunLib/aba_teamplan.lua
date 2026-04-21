@@ -39,6 +39,52 @@ local function gt()
 end
 
 -- ============================================================
+-- State
+-- ============================================================
+
+local TEAMPLAN_RECOMPUTE_INTERVAL = 2.0
+local PLAN_TTL = 12.0
+
+local currentPlan = {
+    intent = "farm",
+    lane = nil,
+    location = nil,
+    validUntil = 0,
+    lastComputeTime = -999,
+    authorID = -1,
+    reason = "initial",
+}
+
+-- ============================================================
+-- Helpers (Dota globals + a few jmz calls)
+--
+-- NOTE: these are declared BEFORE the tormentor/lotus helpers below so the
+-- tormentor/lotus closures can resolve countAliveTeamHeroes as a local
+-- upvalue. Earlier layout had the helpers below the consumers, which made
+-- the names resolve as globals (nil) — crash on first tormentor/lotus probe.
+-- ============================================================
+
+local function countEnemyHeroesNear(loc, radius)
+    local J = jmz()
+    local ok, enemies = pcall(function() return J.GetEnemiesNearLoc(loc, radius) end)
+    if not ok or enemies == nil then return 0 end
+    local n = 0
+    for i = 1, #enemies do
+        if J.IsValidHero(enemies[i]) then n = n + 1 end
+    end
+    return n
+end
+
+local function countAliveTeamHeroes(team)
+    local n = 0
+    local players = GetTeamPlayers(team)
+    for i = 1, #players do
+        if IsHeroAlive(players[i]) then n = n + 1 end
+    end
+    return n
+end
+
+-- ============================================================
 -- Tormentor + Lotus detection (no dedicated API; use unit lists)
 -- ============================================================
 
@@ -59,8 +105,8 @@ local function findNearestTormentorUnit(referenceLoc)
     for i = 1, #neutrals do
         local u = neutrals[i]
         if u ~= nil and not u:IsNull() and u:IsAlive() then
-            local name = u:GetUnitName()
-            if string.find(name, "miniboss") ~= nil then
+            local okName, name = pcall(function() return u:GetUnitName() end)
+            if okName and type(name) == "string" and string.find(name, "miniboss") ~= nil then
                 local d = 0
                 if referenceLoc ~= nil then
                     local loc = u:GetLocation()
@@ -118,47 +164,6 @@ local function isLotusContestable(team, now)
     local aliveAllies = countAliveTeamHeroes(team)
     if aliveAllies < 2 then return false, nil end
     return true, bestLoc
-end
-
--- ============================================================
--- State
--- ============================================================
-
-local TEAMPLAN_RECOMPUTE_INTERVAL = 2.0
-local PLAN_TTL = 12.0
-
-local currentPlan = {
-    intent = "farm",
-    lane = nil,
-    location = nil,
-    validUntil = 0,
-    lastComputeTime = -999,
-    authorID = -1,
-    reason = "initial",
-}
-
--- ============================================================
--- Helpers (Dota globals + a few jmz calls)
--- ============================================================
-
-local function countEnemyHeroesNear(loc, radius)
-    local J = jmz()
-    local ok, enemies = pcall(function() return J.GetEnemiesNearLoc(loc, radius) end)
-    if not ok or enemies == nil then return 0 end
-    local n = 0
-    for i = 1, #enemies do
-        if J.IsValidHero(enemies[i]) then n = n + 1 end
-    end
-    return n
-end
-
-local function countAliveTeamHeroes(team)
-    local n = 0
-    local players = GetTeamPlayers(team)
-    for i = 1, #players do
-        if IsHeroAlive(players[i]) then n = n + 1 end
-    end
-    return n
 end
 
 local function findFurthestAliveLaneBuilding(team, lane)

@@ -68,6 +68,28 @@ export function GetStrategicPressure(): number {
     return value;
 }
 
+// Ult slot isn't universal (Invoker, Meepo, Morphling etc. have non-standard
+// layouts). Use J.Skill.GetAbilityList which already handles "ult at logical
+// index 6" per aba_skill.lua. Fallback: scan slots for a 4-level-max trained
+// ability.
+function getUltimate(bot: Unit): any {
+    const J = jmz();
+    if (J && J.Skill && J.Skill.GetAbilityList) {
+        const [ok, list] = pcall(function () { return J.Skill.GetAbilityList(bot); });
+        if (ok && type(list) === "table" && list[6] !== null) {
+            const [okA, ult] = pcall(function () { return bot.GetAbilityByName(list[6]); });
+            if (okA && ult !== null && !ult.IsNull()) return ult;
+        }
+    }
+    for (let slot = 0; slot <= 5; slot++) {
+        const [okA, ab] = pcall(function () { return bot.GetAbilityInSlot(slot); });
+        if (okA && ab !== null && !ab.IsNull() && ab.IsTrained() && ab.GetMaxLevel() <= 4) {
+            return ab;
+        }
+    }
+    return null;
+}
+
 export function GetUltReadiness(): number {
     const now = DotaTime();
     if (now - ultCache.lastUpdate < RECOMPUTE_INTERVAL) {
@@ -77,8 +99,8 @@ export function GetUltReadiness(): number {
     for (let i = 1; i <= 5; i++) {
         const [ok, m] = pcall(function () { return GetTeamMember(i); });
         if (ok && m !== null && m.IsAlive()) {
-            const [okA, ult] = pcall(function () { return m.GetAbilityInSlot(5); });
-            if (okA && ult !== null && !ult.IsNull() && ult.IsTrained()
+            const ult = getUltimate(m);
+            if (ult !== null && ult.IsTrained()
                 && ult.GetCooldownTimeRemaining() < 2
                 && m.GetMana() >= ult.GetManaCost()) {
                 ready++;
