@@ -323,6 +323,10 @@ local function computePlan(bot)
     -- 2.5 COMMIT_KILL: focus target exists + ≥2 allies near focus
     -- This fires between defend and contest_rosh so a juicy pick takes priority
     -- over farming/pushing but not over base defense.
+    --
+    -- 2.6 LANE_GANK: during laning, a 1v1 on a low-HP adjacent-lane enemy
+    -- is still a commit — pro supports roam solo all the time. Looser than
+    -- commit_kill (1 ally within 1500u is enough).
     local f = focus()
     if f ~= nil then
         local pickSelf = nil
@@ -339,6 +343,18 @@ local function computePlan(bot)
                 if nearAllies ~= nil and #nearAllies >= 2 then
                     return freshPlan("commit_kill", nil, focusLoc,
                         "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies))
+                end
+                -- Lane-gank path: laning phase + low-HP focus + at least 1 close ally
+                local okLaning, isLaning = pcall(function() return jmz().IsInLaningPhase() end)
+                if okLaning and isLaning then
+                    local okHP, hp = pcall(function() return jmz().GetHP(target.unit) end)
+                    if okHP and hp ~= nil and hp < 0.55 then
+                        local closeAllies = jmz().GetAlliesNearLoc(focusLoc, 1500)
+                        if closeAllies ~= nil and #closeAllies >= 1 then
+                            return freshPlan("lane_gank", nil, focusLoc,
+                                "lane-gank hp=" .. string.format("%.2f", hp) .. " allies=" .. tostring(#closeAllies))
+                        end
+                    end
                 end
             end
         end
@@ -433,8 +449,16 @@ local MATCH = {
     commit_kill = {
         -- Everything converges on the target: team_roam and roam go high,
         -- farm/retreat/defend drop hard. Defending is still allowed if needed.
+        -- laning: 0.25 - strong push to abandon lane for a gank opportunity.
         team_roam = 1.0, roam = 1.0, assemble = 0.9,
         farm = 0.15, push = 0.3, defend = 0.5, retreat = 0.3, rune = 0.2, roshan = 0.2, ward = 0.3,
+        laning = 0.25,
+    },
+    lane_gank = {
+        -- Lighter touch than commit_kill — one bot ganks, others keep laning.
+        -- Strong roam boost, moderate laning penalty, keeps farm/defend unchanged.
+        roam = 1.0, team_roam = 0.95, assemble = 0.8,
+        laning = 0.4, farm = 0.5, push = 0.55, defend = 0.8, retreat = 0.7,
     },
     contest_rosh = {
         roshan = 1.0, team_roam = 0.85, assemble = 0.8,

@@ -40,6 +40,7 @@ export type Intent =
     | "defend_base"
     | "defend_lane"
     | "commit_kill"
+    | "lane_gank"
     | "contest_rosh"
     | "contest_tormentor"
     | "contest_lotus"
@@ -346,7 +347,12 @@ const MATCH: Record<Intent, Partial<Record<ModeKey, number>>> = {
     commit_kill: {
         team_roam: 1.0, roam: 1.0, assemble: 0.9,
         farm: 0.15, push: 0.3, defend: 0.5, retreat: 0.3, rune: 0.2, roshan: 0.2, ward: 0.3,
-    },
+        laning: 0.25,
+    } as Partial<Record<ModeKey, number>>,
+    lane_gank: {
+        roam: 1.0, team_roam: 0.95, assemble: 0.8,
+        laning: 0.4, farm: 0.5, push: 0.55, defend: 0.8, retreat: 0.7,
+    } as Partial<Record<ModeKey, number>>,
     contest_rosh: {
         roshan: 1.0, team_roam: 0.85, assemble: 0.8,
         farm: 0.4, push: 0.3, defend: 0.8,

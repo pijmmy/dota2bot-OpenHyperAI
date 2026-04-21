@@ -30,6 +30,11 @@ local isChangePosMessageDone     = false
 if Utils.BuggyHeroesDueToValveTooLazy[botName] then local_mode_laning_generic = dofile( GetScriptDirectory().."/FunLib/override_generic/mode_laning_generic" ) end
 
 function GetDesire()
+	local res = GetDesireInner()
+	return J.Personality.ModulateDesire(bot, res, 'laning')
+end
+
+function GetDesireInner()
 	PickOneAnnouncer()
 	AnnounceMessages()
 
