@@ -768,8 +768,11 @@ export function GetDefendDesireHelper(bot: Unit, lane: Lane): BotModeDesire {
     // Bail-outs to avoid feed / conflicts
     const pos = jmz.GetPosition(bot);
     const bMyLane = bot.GetAssignedLane() === lane;
+    // Previously bailed on ANY enemy in range — which broke defending since defending means fighting enemies.
+    // Now only bail if we're locally outnumbered AND not stronger.
+    const outnumberedHere = ds.nInRangeEnemy.length > ds.nInRangeAlly.length && !ds.weAreStronger;
     if (
-        ds.nInRangeEnemy.length > 0 ||
+        outnumberedHere ||
         (!bMyLane && pos === 1 && gameState.isLaningPhase) || // keep carry safe early
         (jmz.IsDoingRoshan(bot) && jmz.GetAlliesNearLoc(jmz.GetCurrentRoshanLocation(), 2800).length >= 3) ||
         (jmz.IsDoingTormentor(bot) &&
@@ -820,10 +823,14 @@ export function GetDefendDesireHelper(bot: Unit, lane: Lane): BotModeDesire {
     const nDefendAllies = jmz.GetAlliesNearLoc(hub, 2500);
     const nEffAllies = nDefendAllies.length + jmz.Utils.GetAllyIdsInTpToLocation(hub, 2500).length;
 
-    if (lEnemies.length === 0 && (jmz.IsAnyAllyDefending(bot, lane) || jmz.IsCore(bot))) {
+    // Previously the "1 enemy + 2+ defenders" case caused all but one bot to back off,
+    // which often led to the lone defender getting run down. Now only cores bail when
+    // heavily overstaffed (3+ allies) or when the lane is empty and ally is handling it.
+    // Supports always help defend — no bail for them here.
+    if (lEnemies.length === 0 && jmz.IsCore(bot) && jmz.IsAnyAllyDefending(bot, lane)) {
         return BotModeDesire.VeryLow;
     }
-    if (lEnemies.length === 1 && (nEffAllies > lEnemies.length || (jmz.IsAnyAllyDefending(bot, lane) && jmz.GetAverageLevel(false) >= jmz.GetAverageLevel(true)))) {
+    if (lEnemies.length === 1 && nEffAllies >= 3 && jmz.IsCore(bot)) {
         return BotModeDesire.VeryLow;
     }
 
@@ -862,10 +869,13 @@ export function GetDefendDesireHelper(bot: Unit, lane: Lane): BotModeDesire {
         }
     }
 
-    // Don’t throw bodies at doomed low-HP T1/T2
+    // Only abandon a low-HP T1/T2 if the fight is clearly lost (we're outnumbered).
+    // Previously abandoned at 15% HP regardless — a big cause of "bots feed at towers"
+    // because they'd disengage just as enemies were committed, leaving the tower + wave free.
     if (IsValidBuildingTarget(furthestBuilding) && furthestBuilding !== ancient) {
         const hp = jmz.GetHP(furthestBuilding);
-        if ((buildingTier === 1 && hp <= 0.15) || (buildingTier === 2 && hp <= 0.1)) {
+        const lostFight = lEnemies.length > nEffAllies + 1;
+        if (lostFight && ((buildingTier === 1 && hp <= 0.1) || (buildingTier === 2 && hp <= 0.07))) {
             return BotModeDesire.None;
         }
     }

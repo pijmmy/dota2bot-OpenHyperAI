@@ -650,3 +650,17 @@ So a `teamSpirit=0.9` support bot will strongly follow the team plan, while a `t
 
 - `J.TeamPlan.Describe()` returns current intent + lane + reason (e.g., `"defend_lane lane=2 [lane under attack]"`).
 - `J.TeamPlan.GetCurrentPlan()` returns the raw plan table for inspection.
+
+---
+
+## 17. Defend Tuning (PR 3)
+
+Targeted fixes in `aba_defend.ts` / `aba_defend.lua` for three defend gates that previously caused "bots abandon towers" behavior:
+
+1. **Any-enemy-in-range bailout** (`GetDefendDesireHelper` bail-out block) — was returning `VeryLow` if ANY enemy was near the bot, which broke defending since defending a tower means fighting enemies. Changed to bail only when locally outnumbered AND not stronger.
+
+2. **Only-one-defender gate** (near `IsAnyAllyDefending` checks) — the original "1 enemy + 2+ defenders → all but one bail" caused isolated defenders to get run down. Now only **cores** bail when heavily overstaffed (3+ allies). Supports always help defend.
+
+3. **Tower abandonment threshold** (near `buildingTier === 1 && hp <= 0.15`) — previously abandoned any T1 at 15% HP regardless of situation, which was a big cause of the "feed at towers" complaint. Now requires BOTH low HP AND being outnumbered (`lEnemies > nEffAllies + 1`). Thresholds tightened to 10% / 7%.
+
+When regenerating from TSTL (`npm run build`), these changes come from `typescript/bots/FunLib/aba_defend.ts` — Lua was hand-synced to match.

@@ -1042,7 +1042,10 @@ function ____exports.GetDefendDesireHelper(bot, lane)
     ds.weAreStronger = jmz.WeAreStronger(bot, 2500)
     local pos = jmz.GetPosition(bot)
     local bMyLane = bot:GetAssignedLane() == lane
-    if #ds.nInRangeEnemy > 0 or not bMyLane and pos == 1 and gameState.isLaningPhase or jmz.IsDoingRoshan(bot) and #jmz.GetAlliesNearLoc(
+    -- Previously bailed on ANY enemy in range — broke defending (defending = fighting enemies).
+    -- Now only bail if locally outnumbered AND not stronger.
+    local outnumberedHere = #ds.nInRangeEnemy > #ds.nInRangeAlly and not ds.weAreStronger
+    if outnumberedHere or not bMyLane and pos == 1 and gameState.isLaningPhase or jmz.IsDoingRoshan(bot) and #jmz.GetAlliesNearLoc(
         jmz.GetCurrentRoshanLocation(),
         2800
     ) >= 3 or jmz.IsDoingTormentor(bot) and (#jmz.GetAlliesNearLoc(
@@ -1087,10 +1090,13 @@ function ____exports.GetDefendDesireHelper(bot, lane)
     local lEnemies = jmz.GetLastSeenEnemiesNearLoc(hub, 2500)
     local nDefendAllies = jmz.GetAlliesNearLoc(hub, 2500)
     local nEffAllies = #nDefendAllies + #jmz.Utils.GetAllyIdsInTpToLocation(hub, 2500)
-    if #lEnemies == 0 and (jmz.IsAnyAllyDefending(bot, lane) or jmz.IsCore(bot)) then
+    -- Previously the "1 enemy + 2+ defenders" case caused all but one bot to back off,
+    -- which often let the lone defender get run down. Now only cores bail when heavily
+    -- overstaffed. Supports always help defend — no bail for them here.
+    if #lEnemies == 0 and jmz.IsCore(bot) and jmz.IsAnyAllyDefending(bot, lane) then
         return BotModeDesire.VeryLow
     end
-    if #lEnemies == 1 and (nEffAllies > #lEnemies or jmz.IsAnyAllyDefending(bot, lane) and jmz.GetAverageLevel(false) >= jmz.GetAverageLevel(true)) then
+    if #lEnemies == 1 and nEffAllies >= 3 and jmz.IsCore(bot) then
         return BotModeDesire.VeryLow
     end
     local capBoost = shouldDef and 0.1 or 0
@@ -1146,9 +1152,13 @@ function ____exports.GetDefendDesireHelper(bot, lane)
             )
         end
     end
+    -- Only abandon a low-HP T1/T2 if the fight is clearly lost (we're outnumbered).
+    -- Previously abandoned at 15% HP regardless — a big cause of "bots feed at towers"
+    -- because they'd disengage just as enemies were committed, leaving the tower + wave free.
     if IsValidBuildingTarget(furthestBuilding) and furthestBuilding ~= ancient then
         local hp = jmz.GetHP(furthestBuilding)
-        if buildingTier == 1 and hp <= 0.15 or buildingTier == 2 and hp <= 0.1 then
+        local lostFight = #lEnemies > nEffAllies + 1
+        if lostFight and (buildingTier == 1 and hp <= 0.1 or buildingTier == 2 and hp <= 0.07) then
             return BotModeDesire.None
         end
     end
