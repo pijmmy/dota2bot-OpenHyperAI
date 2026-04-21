@@ -20,6 +20,16 @@ local function getTeamPlan()
     return _teamPlanModule
 end
 
+-- Lazy-loaded jmz_func (needed for J.GetPosition in role-aware scaling).
+local _jmz = nil
+local function getJmz()
+    if _jmz == nil then
+        local ok, j = pcall(require, GetScriptDirectory().."/FunLib/jmz_func")
+        if ok then _jmz = j end
+    end
+    return _jmz
+end
+
 -- Constants
 local NOISE_STDDEV = 0.12
 local TILT_UPDATE_INTERVAL = 3.0
@@ -225,6 +235,42 @@ local function computeMultiplier(mode, p)
     return mult
 end
 
+-- Per-role farm scaling (pro-match style: carry gets most farm, supports least).
+-- Applied on top of personality greed to produce sensibly wide gaps.
+-- Pos 1 and 2 cores farm harder; pos 4 and 5 supports farm much less
+-- (frees them for roam / ward / stack).
+local FARM_ROLE_SCALE = {
+    [1] = 1.20,
+    [2] = 1.10,
+    [3] = 0.85,
+    [4] = 0.50,
+    [5] = 0.45,
+}
+
+-- Push/team_roam can also be slightly role-weighted: supports lead initiations,
+-- cores follow up. But we keep it mild.
+local ROAM_ROLE_SCALE = {
+    [1] = 0.90,
+    [2] = 1.00,
+    [3] = 1.00,
+    [4] = 1.15,
+    [5] = 1.10,
+}
+
+local function applyRoleScale(mode, bot, desire)
+    -- Protected access because J.Role may not be fully loaded during very early ticks.
+    local J = getJmz()
+    if J == nil or J.GetPosition == nil then return desire end
+    local ok, pos = pcall(function() return J.GetPosition(bot) end)
+    if not ok or pos == nil then return desire end
+    if mode == "farm" and FARM_ROLE_SCALE[pos] then
+        return desire * FARM_ROLE_SCALE[pos]
+    elseif (mode == "roam" or mode == "team_roam") and ROAM_ROLE_SCALE[pos] then
+        return desire * ROAM_ROLE_SCALE[pos]
+    end
+    return desire
+end
+
 -- Multiply a mode desire by the bot's personality factor. Self-updates tilt.
 -- Also applies team-plan bias if the team plan module is available.
 -- Zero/negative desires pass through unchanged (gates stay as gates).
@@ -245,7 +291,12 @@ function ____exports.ModulateDesire(bot, desire, mode)
 
     -- Then personality multiplier (individual variance on top of team strategy)
     local mult = computeMultiplier(mode, p)
-    return desire * mult
+    desire = desire * mult
+
+    -- Finally, role-based scaling (pro-match farm priority)
+    desire = applyRoleScale(mode, bot, desire)
+
+    return desire
 end
 
 function ____exports.GetMultiplier(bot, mode)

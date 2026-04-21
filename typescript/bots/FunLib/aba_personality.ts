@@ -87,6 +87,46 @@ function getTeamPlan(): any {
     return _teamPlanModule;
 }
 
+// Lazy-loaded jmz_func for role-aware scaling.
+let _jmz: any = null;
+function getJmz(): any {
+    if (_jmz === null) {
+        const [ok, j] = pcall(require, GetScriptDirectory() + "/FunLib/jmz_func");
+        if (ok) _jmz = j;
+    }
+    return _jmz;
+}
+
+// Pro-match-style farm scaling by role.
+const FARM_ROLE_SCALE: Record<number, number> = {
+    1: 1.20,
+    2: 1.10,
+    3: 0.85,
+    4: 0.50,
+    5: 0.45,
+};
+const ROAM_ROLE_SCALE: Record<number, number> = {
+    1: 0.90,
+    2: 1.00,
+    3: 1.00,
+    4: 1.15,
+    5: 1.10,
+};
+
+function applyRoleScale(mode: string, bot: Unit, desire: number): number {
+    const J = getJmz();
+    if (J === null || J.GetPosition === undefined) return desire;
+    const [ok, pos] = pcall(function () { return J.GetPosition(bot); });
+    if (!ok || pos === null) return desire;
+    if (mode === "farm" && FARM_ROLE_SCALE[pos] !== undefined) {
+        return desire * FARM_ROLE_SCALE[pos];
+    }
+    if ((mode === "roam" || mode === "team_roam") && ROAM_ROLE_SCALE[pos] !== undefined) {
+        return desire * ROAM_ROLE_SCALE[pos];
+    }
+    return desire;
+}
+
 // ============================================================
 // Mode-to-trait modulation table
 //
@@ -283,8 +323,8 @@ function computeMultiplier(mode: ModeTag, p: BotPersonality): number {
  * Multiply a mode desire by the bot's personality factor for that mode.
  * Returns the adjusted desire. Caller handles any final capping.
  *
- * Also self-updates tilt as a side effect (cheap — has internal 3s rate limiter)
- * and applies team-plan bias if the team plan module is available.
+ * Applies in order: team-plan bias, personality multiplier, role scaling.
+ * Also self-updates tilt as a side effect (cheap — internal 3s rate limiter).
  */
 export function ModulateDesire(bot: Unit, desire: number, mode: ModeTag): number {
     if (!bot || desire === null || desire === undefined) return desire;
@@ -300,9 +340,14 @@ export function ModulateDesire(bot: Unit, desire: number, mode: ModeTag): number
         desire = desire * planMult;
     }
 
-    // Then personality multiplier
+    // Then personality multiplier (individual variance)
     const mult = computeMultiplier(mode, p);
-    return desire * mult;
+    desire = desire * mult;
+
+    // Finally, role scaling (pro-match farm priority)
+    desire = applyRoleScale(mode, bot, desire);
+
+    return desire;
 }
 
 /**
