@@ -72,13 +72,16 @@ local function getUltimate(bot)
             if okA and ult ~= nil and not ult:IsNull() then return ult end
         end
     end
-    -- Fallback: scan slots 0..5 and return the highest-level trained ability
-    -- (heuristic; ults are typically trainable + have only 3-4 levels).
-    for slot = 0, 5 do
+    -- Fallback: scan slots and use ab:IsUltimate() which correctly identifies
+    -- the ult regardless of its slot position. Previous heuristic
+    -- (GetMaxLevel() <= 4) incorrectly matched normal abilities 1-4.
+    for slot = 0, 24 do
         local okA, ab = pcall(function() return bot:GetAbilityInSlot(slot) end)
-        if okA and ab ~= nil and not ab:IsNull() and ab:IsTrained()
-           and ab:GetMaxLevel() <= 4 then
-            return ab
+        if okA and ab ~= nil and not ab:IsNull() then
+            local okU, isUlt = pcall(function() return ab:IsUltimate() end)
+            if okU and isUlt and ab:IsTrained() then
+                return ab
+            end
         end
     end
     return nil

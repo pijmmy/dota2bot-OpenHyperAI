@@ -300,8 +300,10 @@ local function teamIsWeak(team)
     return total >= 2 and lowCount >= math.ceil(total * 0.5)
 end
 
--- Count enemies whose last-seen is stale (>= staleSeconds). High stale count
--- often means they're smoked up or rotating — likely gank incoming.
+-- Count enemies whose last-seen is stale (>= staleSeconds). Only counts heroes
+-- that HAVE been seen at least once and whose info is genuinely old. "Never seen"
+-- heroes don't count (otherwise we'd flag them at game start before any vision
+-- accumulated and trigger spurious regroups).
 local function countMissingEnemies(enemyTeam, staleSeconds)
     local players = GetTeamPlayers(enemyTeam)
     local missing = 0
@@ -309,9 +311,11 @@ local function countMissingEnemies(enemyTeam, staleSeconds)
         local pid = players[i]
         if IsHeroAlive(pid) then
             local info = GetHeroLastSeenInfo(pid)
-            if info == nil or info[1] == nil then
-                missing = missing + 1
-            elseif info[1].time_since_seen == nil or info[1].time_since_seen >= staleSeconds then
+            -- Only count if info exists AND time_since_seen is a number >= staleSeconds.
+            -- Skip missing info / nil time_since_seen — those mean "no data yet", not "smoked".
+            if info ~= nil and info[1] ~= nil
+               and type(info[1].time_since_seen) == "number"
+               and info[1].time_since_seen >= staleSeconds then
                 missing = missing + 1
             end
         end
