@@ -129,7 +129,13 @@ Customize.ThinkLess = 1;
 -- Set true to enable periodic debug prints to the console:
 -- every 30s one bot prints the current team plan / focus / game theory state.
 -- Use to see what the new decision systems are actually deciding during play.
-Customize.Debug = false
+Customize.Debug = true
+
+-- FretBots auto-activation. When true, hero_selection.lua loads FretBots at
+-- game start — no need to run `sv_cheats 1; script_reload_code bots/FretBots`
+-- manually every game. Default true. Set false to go back to manual.
+-- The difficulty is still controlled by Customize.Fretbots.Default_Difficulty above.
+Customize.Fretbots_AutoEnable = true
 
 return Customize
 

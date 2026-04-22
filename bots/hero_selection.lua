@@ -972,10 +972,49 @@ local function InitPickScheduleOnce()
 end
 
 --==============================================================================
+-- FretBots auto-activation
+--
+-- User shouldn't have to type `sv_cheats 1` + `script_reload_code bots/FretBots`
+-- every single game. Trigger it from Think() once the game state allows.
+-- Gated by Customize.Fretbots_AutoEnable (default true).
+--==============================================================================
+
+local fretbotsAutoInitialized = false
+local function AutoInitFretBots()
+	if fretbotsAutoInitialized then return end
+	-- Only one team's hero_selection.lua instance needs to init (global side effects).
+	-- Gate to radiant side to avoid double-loading.
+	if GetTeam() ~= TEAM_RADIANT then
+		fretbotsAutoInitialized = true
+		return
+	end
+	local gs = GetGameState()
+	if gs == nil or gs < GAME_STATE_HERO_SELECTION then return end
+
+	-- User opt-out: set Customize.Fretbots_AutoEnable = false to disable.
+	if Customize and Customize.Fretbots_AutoEnable == false then
+		fretbotsAutoInitialized = true
+		return
+	end
+
+	fretbotsAutoInitialized = true
+	print('[OHA] Auto-activating FretBots mode...')
+	local ok, err = pcall(function() require 'bots.FretBots' end)
+	if not ok then
+		print('[OHA][WARN] FretBots auto-init failed: '..tostring(err))
+		print('[OHA]       Fall back to manual: sv_cheats 1; script_reload_code bots/FretBots')
+	else
+		print('[OHA] FretBots auto-activated successfully.')
+	end
+end
+
+--==============================================================================
 -- Think loop
 --==============================================================================
 
 function Think()
+	AutoInitFretBots()
+
 	if GetGameMode() == GAMEMODE_CM or GetGameMode() == GAMEMODE_REVERSE_CM then
 		CaptainMode.CaptainModeLogic(SupportedHeroes);
 		CaptainMode.AddToList();
