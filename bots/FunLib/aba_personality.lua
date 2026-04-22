@@ -289,6 +289,13 @@ function ____exports.ModulateDesire(bot, desire, mode)
     if type(desire) ~= "number" then return desire end
     if desire <= 0 then return desire end
     ____exports.UpdateTilt(bot)
+
+    -- Periodic debug hook (gated by Customize.Debug; 30s rate-limit inside)
+    local J = getJmz()
+    if J ~= nil and J.DebugPeriodic ~= nil then
+        pcall(function() J.DebugPeriodic() end)
+    end
+
     local p = ____exports.GetEffective(bot)
 
     -- Apply team-plan bias first (team strategy layer)

@@ -105,6 +105,24 @@ else
     }
 end
 
+-- Periodic debug summary — prints team plan / focus / game theory state every
+-- 30s so the user can see what the systems are doing during play. Controlled
+-- by Customize.Debug if set; defaults off to avoid spam in non-dev runs.
+local _lastDebugPrint = -999
+function J.DebugPeriodic()
+    local okC, Customize = pcall(require, GetScriptDirectory()..'/Customize/general')
+    if okC and Customize and Customize.Debug == true then
+        local now = DotaTime()
+        if now - _lastDebugPrint >= 30 and now > 0 then
+            _lastDebugPrint = now
+            local plan = 'plan: ' .. (J.TeamPlan.Describe and J.TeamPlan.Describe() or '?')
+            local focus = 'focus: ' .. (J.Focus.Describe and J.Focus.Describe() or '?')
+            local gt = 'gt: ' .. (J.GameTheory.Describe and J.GameTheory.Describe() or '?')
+            print(string.format('[OHA t=%.0fs] %s | %s | %s', now, plan, focus, gt))
+        end
+    end
+end
+
 -- Team plan layer. Same pcall fallback pattern.
 local okTeamPlan, TeamPlanModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_teamplan')
 if okTeamPlan and TeamPlanModule then

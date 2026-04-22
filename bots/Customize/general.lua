@@ -126,6 +126,11 @@ Customize.Fretbots = {
 -- This won't be very effective for FPS improvement because Valve has a lot of compute on their side that your PC have to handle for Local Hosting.
 Customize.ThinkLess = 1;
 
+-- Set true to enable periodic debug prints to the console:
+-- every 30s one bot prints the current team plan / focus / game theory state.
+-- Use to see what the new decision systems are actually deciding during play.
+Customize.Debug = false
+
 return Customize
 
 
