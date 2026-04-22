@@ -47,13 +47,15 @@ local currentEnemyFocus = {
 -- like Chrono / Duel / Doom need the same response).
 -- ============================================================
 
+-- Verified modifier names cross-checked against existing hero files.
+-- Wrong names were dead code (HasModifier always false).
 local BIG_ULT_MODIFIERS = {
     'modifier_faceless_void_chronosphere_freeze',
     'modifier_enigma_black_hole_pull',
     'modifier_enigma_black_hole_thinker',
     'modifier_magnataur_reverse_polarity',
     'modifier_legion_commander_duel',
-    'modifier_tidehunter_ravage_slow',
+    'modifier_tidehunter_ravage',                                -- was _slow (wrong)
     'modifier_doom_bringer_doom',
     'modifier_shadow_demon_disruption',
     'modifier_bane_fiends_grip',
@@ -64,11 +66,14 @@ local BIG_ULT_MODIFIERS = {
     'modifier_necrolyte_reapers_scythe',
     'modifier_pudge_dismember',
     'modifier_sandking_burrowstrike',
-    'modifier_kunkka_ghostship_damage_delay',
+    'modifier_kunkka_ghost_ship_damage_delay',                   -- was ghostship (wrong)
     'modifier_disruptor_static_storm',
-    'modifier_outworld_destroyer_astral_imprisonment_prison',
+    'modifier_obsidian_destroyer_astral_imprisonment_prison',    -- OD internal is obsidian (wrong was outworld)
     'modifier_ember_spirit_searing_chains',
-    'modifier_item_aeon_disk_buff',  -- ally used aeon — they're in serious trouble
+    'modifier_item_aeon_disk_buff',  -- ally used aeon — serious trouble
+    'modifier_axe_berserkers_call',                              -- added: taunts are commit
+    'modifier_batrider_flaming_lasso',                           -- added
+    'modifier_winter_wyvern_winters_curse',                      -- added
 }
 
 local function hasBigUltModifier(unit)
