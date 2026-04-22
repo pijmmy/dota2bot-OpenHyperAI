@@ -57,6 +57,11 @@ local nShrineOfWisdomTeam = TEAM_RADIANT
 -- GetDesire  (reference structure, with local additions)
 --------------------------------------------------------------------
 function GetDesire()
+	local res = GetDesireInner()
+	return J.Personality.ModulateDesire(bot, res, 'rune')
+end
+
+function GetDesireInner()
 	X.InitRune()
 
 	if (DotaTime() > 2 * 60 and DotaTime() < 6 * 60 and GetUnitToLocationDistance(bot, GetRuneSpawnLocation(RUNE_POWERUP_2)) < 80) then
