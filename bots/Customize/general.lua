@@ -105,7 +105,9 @@ Customize.Force_Group_Push_Level = 1
 -- Note: these settings below will override the pre-defind settings in Fretbots folder.
 Customize.Fretbots = {
     -- Default difficulty, a number between: [0, 10]
-    Default_Difficulty = 2,
+    -- 2 is mild; 6 is solid challenge; 8+ is crushing. User plays Ultra Hard
+    -- normally so starting at 6. Adjust to taste.
+    Default_Difficulty = 6,
 
     -- Default ally bots bonus scale comparing to enemy bots, a number between: [0, 1]
     Default_Ally_Scale = 0.5,
