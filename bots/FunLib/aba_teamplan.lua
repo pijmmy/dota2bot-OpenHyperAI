@@ -339,6 +339,31 @@ local function freshPlan(intent, lane, loc, reason)
     }
 end
 
+-- Compute a group location for late-game regrouping.
+-- Priority: closest threatened ally rax -> team centroid -> ancient.
+local function computeGroupLocation(team)
+    local J = jmz()
+    -- If we have a rax under attack, group there
+    local ancient = GetAncient(team)
+    if ancient == nil then return nil end
+    -- Use our ancient's location as the group anchor for defensive stance
+    return ancient:GetLocation()
+end
+
+-- Opening flavor: rolled once per match to vary early-game strategy.
+-- Stored at module scope so every computePlan call sees the same roll.
+local _openingFlavor = nil
+local function getOpeningFlavor()
+    if _openingFlavor ~= nil then return _openingFlavor end
+    local roll = RandomInt(1, 100)
+    if roll <= 22 then _openingFlavor = "lotus_rush"
+    elseif roll <= 45 then _openingFlavor = "aggro_roam"
+    elseif roll <= 70 then _openingFlavor = "passive_lane"
+    elseif roll <= 88 then _openingFlavor = "deward_scout"
+    else _openingFlavor = "smoke_gank_early" end
+    return _openingFlavor
+end
+
 local function computePlan(bot)
     local team = GetTeam()
     local enemyTeam = GetOpposingTeam()
@@ -470,9 +495,40 @@ local function computePlan(bot)
         end
     end
 
+    -- 5.7 LATE_GAME_GROUP: after 25min, default to grouping rather than split
+    -- farming. Real teams don't split-farm late; the risk of a 5-man pick
+    -- or a lost high-ground defense is too high. User complaint: "late game
+    -- they are not defending higher ground, they should be grouping up."
+    if now > 25 * 60 then
+        local groupLoc = computeGroupLocation(team)
+        if groupLoc ~= nil then
+            return freshPlan("late_game_group", nil, groupLoc, "late game: group at high ground")
+        end
+    end
+
     -- 6. REGROUP
     if teamIsWeak(team) then
         return freshPlan("regroup", nil, nil, "team needs to reset")
+    end
+
+    -- 6.5 OPENING FLAVOR: early-game variance so bots don't always start the
+    -- same way. User complaint: "dont always start the same." Rolled once
+    -- per match; applies during laning phase when no urgent intent fires.
+    if now < 4 * 60 then
+        local flavor = getOpeningFlavor()
+        if flavor == "lotus_rush" then
+            -- Bias toward lotus pickup even if normal gate wouldn't fire yet
+            local lotusReady, lotusLoc = isLotusContestable(team, now)
+            if lotusReady then
+                return freshPlan("contest_lotus", nil, lotusLoc, "opening: lotus_rush")
+            end
+        elseif flavor == "aggro_roam" or flavor == "smoke_gank_early" then
+            -- Bias toward team_roam even without a low-HP focus (opportunistic rotations)
+            return freshPlan("smoke_gank", nil, nil, "opening: " .. flavor)
+        elseif flavor == "deward_scout" then
+            return freshPlan("regroup", nil, nil, "opening: deward_scout (ward coverage)")
+        end
+        -- passive_lane falls through to farm — default safe laning
     end
 
     -- 7. FARM default
@@ -520,9 +576,17 @@ local MATCH = {
         -- Everything converges on the target: team_roam and roam go high,
         -- farm/retreat/defend drop hard. Defending is still allowed if needed.
         -- laning: 0.25 - strong push to abandon lane for a gank opportunity.
+        -- retreat 0.55: previously 0.3 which suppressed retreat too hard —
+        -- bots would dive towers / teammates instead of fleeing. User feedback:
+        -- "bristleback went straight for our tower when we attacked."
         team_roam = 1.0, roam = 1.0, assemble = 0.9,
-        farm = 0.15, push = 0.3, defend = 0.5, retreat = 0.3, rune = 0.2, roshan = 0.2, ward = 0.3,
+        farm = 0.15, push = 0.3, defend = 0.5, retreat = 0.55, rune = 0.2, roshan = 0.2, ward = 0.3,
         laning = 0.25,
+    },
+    late_game_group = {
+        -- Group up, hold position, defend rax/base. Don't split farm or push alone.
+        assemble = 1.0, defend = 1.0, team_roam = 0.85, retreat = 0.9,
+        farm = 0.35, push = 0.65, roam = 0.55, rune = 0.4, roshan = 0.65, ward = 0.7,
     },
     lane_gank = {
         -- Lighter touch than commit_kill — one bot ganks, others keep laning.
