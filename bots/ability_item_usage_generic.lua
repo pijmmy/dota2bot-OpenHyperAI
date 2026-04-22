@@ -2429,6 +2429,18 @@ X.ConsiderItemDesire["item_force_staff"] = function( hItem )
 		return BOT_ACTION_DESIRE_NONE
 	end
 
+	-- Global save signal: force ally out of enemy commit (push them forward).
+	-- Force staff doesn't require them to be retreating — being chained or
+	-- silenced with low HP is enough reason to force them out.
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange, J.Save.URGENCY_HIGH)
+		if saveAlly ~= nil and not saveAlly:IsMagicImmune()
+			and J.IsInRange(bot, saveAlly, nCastRange) then
+			sCastMotive = 'Force-save ally under commit'
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, sCastType, sCastMotive
+		end
+	end
+
 	-- 解开先知的树框。bug: 因为先知的树不是正常的树。GetNearbyTrees 不会返回先知的树
 	if bot:HasModifier('modifier_furion_sprout_damage') then
 		hEffectTarget = bot
@@ -2618,6 +2630,18 @@ X.ConsiderItemDesire["item_glimmer_cape"] = function( hItem )
 	local sCastType = 'unit'
 	local hEffectTarget = nil
 	local sCastMotive = nil
+
+	-- Global save signal: glimmer an ally being committed on (invis break + MR)
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange, J.Save.URGENCY_HIGH)
+		if saveAlly ~= nil and not saveAlly:IsMagicImmune()
+			and not saveAlly:HasModifier('modifier_item_glimmer_cape')
+			and not saveAlly:HasModifier('modifier_item_dustofappearance')
+			and J.IsInRange(bot, saveAlly, nCastRange) then
+			sCastMotive = 'Glimmer-save ally'
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, sCastType, sCastMotive
+		end
+	end
 
 
 	if	bot:DistanceFromFountain() > 600
@@ -3204,6 +3228,18 @@ X.ConsiderItemDesire["item_lotus_orb"] = function( hItem )
 	local hEffectTarget = nil
 	local sCastMotive = nil
 	local nNearAllyList = J.GetNearbyHeroes(bot, nCastRange, false, BOT_MODE_NONE )
+
+	-- Global save signal: lotus an ally being committed on (reflects spells back)
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange, J.Save.URGENCY_HIGH)
+		if saveAlly ~= nil and not saveAlly:IsMagicImmune()
+			and not saveAlly:HasModifier('modifier_item_lotus_orb_active')
+			and not saveAlly:HasModifier('modifier_antimage_spell_shield')
+			and J.IsInRange(bot, saveAlly, nCastRange) then
+			sCastMotive = 'Lotus-save ally'
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, sCastType, sCastMotive
+		end
+	end
 
 
 	for _, npcAlly in pairs( nNearAllyList )

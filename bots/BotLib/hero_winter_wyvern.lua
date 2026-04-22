@@ -616,6 +616,14 @@ function X.ConsiderColdEmbrace()
     end
 
     local nCastRange = J.GetProperCastRange(false, bot, ColdEmbrace:GetCastRange())
+
+    -- Global save signal: Cold Embrace on threatened ally (invuln + heal over time)
+    if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+        local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange, J.Save.URGENCY_HIGH)
+        if saveAlly ~= nil and J.IsInRange(bot, saveAlly, nCastRange) then
+            return BOT_ACTION_DESIRE_HIGH, saveAlly
+        end
+    end
     local nDuration = ColdEmbrace:GetSpecialValueFloat('duration')
     local nBaseHealPerSec = ColdEmbrace:GetSpecialValueInt('heal_additive')
     local nMaxHPHealPercentage = ColdEmbrace:GetSpecialValueInt('heal_percentage') / 100
