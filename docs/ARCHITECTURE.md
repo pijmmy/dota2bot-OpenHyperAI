@@ -27,6 +27,8 @@ Last verified against: **Patch 7.41a** (March 2026)
 17. [Defend Tuning (PR 3)](#17-defend-tuning-pr-3)
 18. [Focus Target + Kill Commit](#18-focus-target--kill-commit)
 19. [Game Theory Layer](#19-game-theory-layer)
+20. [Save-Ally + Enemy-Focus Defense](#20-save-ally--enemy-focus-defense)
+21. [Channel Interrupt + Late-Game Grouping](#21-channel-interrupt--late-game-grouping)
 
 ---
 
@@ -771,3 +773,72 @@ Extremes compound multiplicatively but each layer is moderate, so typical final 
 
 - `J.GameTheory.Describe()` → `"pressure=+0.24 ultReady=2 commit>=2 push>=4 rosh>=3"`
 - Call at any time to see how the game state is shaping decisions.
+
+---
+
+## 20. Save-Ally + Enemy-Focus Defense
+
+Defensive mirror of the focus / commit_kill system. Where aba_focus picks a priority ENEMY for OUR team to kill, aba_enemy_focus detects when enemies are committing on ONE of OUR allies, so we can collapse defensively instead of letting them 5-man pick our carry.
+
+### Files
+
+| File | Role |
+|------|------|
+| `bots/FunLib/aba_enemy_focus.lua` | Detects threatened ally (urgency-scored) |
+| `bots/FunLib/aba_save.lua` | Save-ally helper, urgency-boosted when enemy-focus is active |
+
+### Trigger conditions
+
+An ally is flagged as enemy-focus target when EITHER:
+
+1. **Multi-attacker case**: ≥2 enemies within 900u of the ally AND attacking them / recently damaged them. Urgency = `(1-hp) + 0.35·enemies + 0.4·recentDamage + 0.3·disabled + 0.4·isCore`.
+2. **Big-ult case**: ally has any of 24 known big-ult modifiers (Chrono, Ravage, RP, Duel, Doom, Fiend's Grip, Reaper's Scythe, Dismember, Ghost Ship, etc.). Single-enemy channels count as commits. Urgency forced to ≥ 2.0.
+
+### Downstream effects
+
+- **Team plan**: new `save_ally` intent at priority 2.4 (above commit_kill, below defend_lane). Match table: `team_roam 1.0, assemble 0.95, defend 0.85`. Bots converge.
+- **Save spells**: `J.Save.GetAllyUnderThreat` gets a +0.8 urgency boost on the enemy-focus target, ensuring CRITICAL-tier urgency for the RIGHT ally (not some other mildly-hurt one).
+- **Assemble mode**: `save_ally` is in `ASSEMBLE_INTENTS`, so the mode reads the plan's location and physically walks bots to the threatened ally.
+
+### Heroes adopting the save system
+
+Adopted in `Consider*` functions at HIGH or CRITICAL urgency thresholds:
+- Dazzle (Shallow Grave), Oracle (False Promise), Omniknight (Guardian Angel), Abaddon (Aphotic Shield), Treant (Living Armor), Winter Wyvern (Cold Embrace), Snapfire (Firesnap Cookie)
+- Item saves: Force Staff, Glimmer Cape, Lotus Orb (all in `ability_item_usage_generic.lua`)
+
+### Debug
+
+- `J.EnemyFocus.Describe()` → `"npc_dota_hero_morphling [under-attack,low-hp urgency=2.41 enemies=3]"` or `"no enemy commit"`
+
+---
+
+## 21. Channel Interrupt + Late-Game Grouping
+
+Two smaller but high-impact additions:
+
+### Channel interrupt (mode_roam, mode_team_roam)
+
+At the top of both mode Think functions: iterate nearby enemies (within 1400u), check `IsChanneling()` — if true and not magic-immune / invulnerable, force-attack them. Interrupts Black Hole / Freezing Field / Shackles / Fiend's Grip / Macropyre / Ghost Ship / Dismember etc.
+
+Priority: ABOVE commit_kill focus override. Interrupting a channel beats finishing a pick.
+
+### Late-game grouping (team plan)
+
+New intent `late_game_group` at priority 5.7 (after missing-enemy regroup, before team-HP regroup). Fires at `DotaTime() > 25 * 60`. Plan location = our Ancient. Match: `assemble 1.0, defend 1.0, retreat 0.9, team_roam 0.85, farm 0.35`.
+
+Drives late-game "stop split-farming, group at high ground for defense." User feedback: "late game they are not defending higher ground, they should be grouping up."
+
+### Opening flavor variance (team plan)
+
+At game start (first 4 min when no urgent intent fires), one of five flavors is applied based on a seeded roll:
+- `lotus_rush` (22%) — force contest_lotus earlier
+- `aggro_roam` (23%) — bias smoke_gank
+- `passive_lane` (25%) — default farm, nothing special
+- `deward_scout` (18%) — regroup intent (ward coverage)
+- `smoke_gank_early` (12%) — bias smoke_gank
+
+Addresses "dont always start the same."
+
+### Assemble mode integration (CRITICAL FIX)
+
+`mode_assemble_generic.lua` was previously only responding to HUMAN pings. Team-plan location (set by late_game_group, save_ally, contest_rosh, contest_tormentor, defend_base, defend_lane) was ignored. Fixed: assemble now reads `J.TeamPlan.GetCurrentPlan().location` when intent is in `ASSEMBLE_INTENTS`. This is what finally makes bots physically walk to team-plan locations rather than just biasing desires.

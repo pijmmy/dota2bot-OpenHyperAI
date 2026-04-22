@@ -87,3 +87,21 @@ Per-team priority enemy target based on isolation/HP/value; when ≥2 allies are
 - Core: `bots/FunLib/aba_focus.lua` (+ TS source). Exposed as `J.Focus.*`.
 - Hook point for hero files: `J.Focus.GetFocusIfInRange(bot, range)` returns the team's focus if in range (for overriding attack target selection). Not yet adopted in hero files.
 - See `docs/ARCHITECTURE.md` section 18.
+
+## Save-Ally + Enemy-Focus Defense
+
+Defensive mirror of the focus system. Detects when enemies commit on one of our allies -> triggers `save_ally` team intent -> bots collapse defensively + save spells fire on the right ally.
+
+- Core: `bots/FunLib/aba_enemy_focus.lua` (J.EnemyFocus.*) + `bots/FunLib/aba_save.lua` (J.Save.*).
+- Triggers on EITHER 2+ attackers on ally OR big-ult modifier on ally (Chrono/Ravage/Doom/etc.).
+- Adopted in save heroes (Dazzle/Oracle/Omni/Abaddon/Treant/Wyvern/Snapfire) and save items (Force/Glimmer/Lotus).
+- See `docs/ARCHITECTURE.md` section 20.
+
+## Channel Interrupt + Late-Game Grouping
+
+Two important patches:
+- Channel interrupt: at top of `mode_roam` / `mode_team_roam` Think, force-attack any enemy `IsChanneling()`. Cancels Black Hole / Freezing Field / Shackles / etc.
+- Late-game group (intent): after 25min, team plan becomes `late_game_group` with location = Ancient. Bots assemble defensively instead of split farming.
+- Opening flavor variance: rolled per-match, gives different early-game behaviors.
+- Assemble mode fix: previously only responded to human pings; now reads team-plan location for `late_game_group / save_ally / contest_rosh / contest_tormentor / defend_base / defend_lane`.
+- See `docs/ARCHITECTURE.md` section 21.
