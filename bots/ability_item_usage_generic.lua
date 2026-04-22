@@ -8435,8 +8435,9 @@ local function UseScan()
 	end
 
 	-- Scan Roshan pit when we have reason to believe enemies are doing rosh.
-	-- Reason: 3+ enemies missing + our aegis is down + mid-to-late game.
-	if DotaTime() < 15 * 60 then return end
+	-- Rosh spawns at 8 min; most attempts happen 10-12 min. Don't gate so
+	-- late that enemies already have aegis.
+	if DotaTime() < 10 * 60 then return end
 
 	local enemyPlayers = GetTeamPlayers(GetOpposingTeam())
 	local missing = 0
