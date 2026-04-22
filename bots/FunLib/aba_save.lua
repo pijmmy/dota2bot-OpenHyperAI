@@ -80,12 +80,24 @@ end
      of `bot`. Returns (nil, 0) if no ally needs saving.
 
      Excludes the caller (`bot`) — bots save teammates, not themselves.
-     For self-save (BKB, Euls on self), use existing item/ability logic. ]]
+     For self-save (BKB, Euls on self), use existing item/ability logic.
+
+     Cross-integration: if J.EnemyFocus has identified a team-wide enemy-commit
+     target AND the bot is close enough to help, that target's urgency is
+     boosted by +0.8 (guarantees CRITICAL-tier urgency so big saves fire). ]]
 function ____exports.GetAllyUnderThreat(bot, saveRange)
     if bot == nil then return nil, 0 end
     local J = jmz()
     local allies = J.GetNearbyHeroes(bot, saveRange, false, BOT_MODE_NONE)
     if allies == nil then return nil, 0 end
+
+    -- Enemy-focus boost: team-wide signal. If an ally is identified as
+    -- being committed on by enemies, bias save urgency on them.
+    local enemyFocusAlly = nil
+    if J.EnemyFocus ~= nil and J.EnemyFocus.IsActive and J.EnemyFocus.IsActive() then
+        local ef = J.EnemyFocus.GetThreatenedAlly()
+        if ef ~= nil and ef.unit ~= nil then enemyFocusAlly = ef.unit end
+    end
 
     local best = nil
     local bestUrgency = 0
@@ -93,6 +105,9 @@ function ____exports.GetAllyUnderThreat(bot, saveRange)
         local ally = allies[i]
         if ally ~= nil and ally ~= bot and J.IsValidHero(ally) and not ally:IsIllusion() then
             local urgency, _ = scoreAllyThreat(ally, bot)
+            if ally == enemyFocusAlly then
+                urgency = urgency + 0.8  -- this is THE ally being committed on; prioritize
+            end
             if urgency > bestUrgency then
                 best = ally
                 bestUrgency = urgency

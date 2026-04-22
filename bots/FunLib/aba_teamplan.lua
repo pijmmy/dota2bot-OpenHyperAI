@@ -38,6 +38,16 @@ local function gt()
     return _gt
 end
 
+-- Enemy focus module (defensive signal — ally being committed on)
+local _ef = nil
+local function enemyFocus()
+    if _ef == nil then
+        local ok, e = pcall(require, GetScriptDirectory().."/FunLib/aba_enemy_focus")
+        if ok then _ef = e end
+    end
+    return _ef
+end
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -397,6 +407,28 @@ local function computePlan(bot)
         return freshPlan("defend_lane", threat.lane, threat.loc, "lane under attack")
     end
 
+    -- 2.4 SAVE_ALLY: enemy is committing on one of our heroes — collapse defensively.
+    -- Sits ABOVE commit_kill because saving a teammate > finishing our own pick.
+    local ef = enemyFocus()
+    if ef ~= nil then
+        local pickSelf = nil
+        for i = 1, 5 do
+            local m = GetTeamMember(i)
+            if m ~= nil and m:IsAlive() then pickSelf = m; break end
+        end
+        if pickSelf ~= nil then
+            ef.MaybeRecompute(pickSelf)
+            if ef.IsActive() then
+                local threatened = ef.GetThreatenedAlly()
+                if threatened ~= nil and threatened.unit ~= nil then
+                    local saveLoc = threatened.unit:GetLocation()
+                    return freshPlan("save_ally", nil, saveLoc,
+                        "save=" .. (threatened.reason or "?") .. " urgency=" .. string.format("%.2f", threatened.urgency or 0))
+                end
+            end
+        end
+    end
+
     -- 2.5 COMMIT_KILL: focus target exists + ≥ threshold allies near focus
     -- (threshold adapts to pressure and focus quality — a very high-score
     -- focus lowers the threshold by 1, so a juicy isolated-low-HP core
@@ -571,6 +603,14 @@ local MATCH = {
     defend_lane = {
         defend = 1.0, retreat = 0.85, assemble = 0.85,
         farm = 0.4, roam = 0.3, push = 0.2, team_roam = 0.35, rune = 0.6, roshan = 0.3,
+    },
+    save_ally = {
+        -- Collapse defensively on threatened ally. High team_roam + assemble
+        -- so bots converge. Defend also stays high (ally may be near tower).
+        -- Retreat is mid — we want to SAVE not flee; dying bots can flee via
+        -- their own retreat mode logic.
+        team_roam = 1.0, assemble = 0.95, defend = 0.85, roam = 0.85,
+        farm = 0.2, push = 0.25, retreat = 0.55, rune = 0.3, roshan = 0.25,
     },
     commit_kill = {
         -- Everything converges on the target: team_roam and roam go high,

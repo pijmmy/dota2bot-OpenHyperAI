@@ -73,6 +73,22 @@ else
     }
 end
 
+-- Enemy-focus detection: detect when enemy team is committing on one of OUR
+-- allies, so bots can collapse defensively (save, interrupt, TP response).
+local okEF, EnemyFocusModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_enemy_focus')
+if okEF and EnemyFocusModule then
+    J.EnemyFocus = EnemyFocusModule
+else
+    print('[WARN] aba_enemy_focus not loaded: '..tostring(EnemyFocusModule))
+    J.EnemyFocus = {
+        GetThreatenedAlly = function() return { unit=nil, urgency=0, validUntil=0, reason='stub' } end,
+        MaybeRecompute = function(_) return { unit=nil, urgency=0, validUntil=0, reason='stub' } end,
+        IsActive = function() return false end,
+        CanHelp = function(_, _) return false end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 -- Save-ally detection (urgency-scored helper used by save-spell hero files).
 local okSave, SaveModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_save')
 if okSave and SaveModule then
