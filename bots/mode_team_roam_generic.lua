@@ -297,6 +297,27 @@ function Think()
 	-- diabled think less to avoid failing to last hit
     -- if J.Utils.IsBotThinkingMeaningfulAction(bot, Customize.ThinkLess, "team_roam") then return end
 
+    -- Channel interrupt: enemy channeling a big ult (Enigma Black Hole,
+    -- Shaman Shackles, Tide Ravage, CM Freezing Field, etc.) — priority
+    -- target the channeler to cancel the ult. Fires BEFORE focus override
+    -- because interrupting a team-killing ult beats finishing a pick.
+    do
+        local enemies = bot:GetNearbyHeroes(1400, true, BOT_MODE_NONE)
+        if enemies ~= nil then
+            for i = 1, #enemies do
+                local e = enemies[i]
+                if J.IsValidHero(e) and not J.IsSuspiciousIllusion(e)
+                   and e:IsChanneling()
+                   and not e:IsMagicImmune()
+                   and not e:IsInvulnerable()
+                   and X.CanBeAttacked(e) then
+                    bot:Action_AttackUnit(e, true)
+                    return
+                end
+            end
+        end
+    end
+
     -- Focus attack-target override: when the team plan is commit_kill, bots
     -- have been converging on a priority enemy. Without this, the bot's
     -- existing target-picking can attack creeps or weaker-but-closer heroes

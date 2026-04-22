@@ -142,6 +142,25 @@ function Think()
     if J.CanNotUseAction(bot) then return end
 	if J.Utils.IsBotThinkingMeaningfulAction(bot, Customize.ThinkLess, "roam") then return end
 
+	-- Channel interrupt: attack any enemy channeling a big ult. Fires before
+	-- other target-picking because interrupting a team-killing ult beats
+	-- chasing the commit target.
+	do
+		local enemies = bot:GetNearbyHeroes(1400, true, BOT_MODE_NONE)
+		if enemies ~= nil then
+			for i = 1, #enemies do
+				local e = enemies[i]
+				if J.IsValidHero(e) and not J.IsSuspiciousIllusion(e)
+				   and e:IsChanneling()
+				   and not e:IsMagicImmune()
+				   and not e:IsInvulnerable() then
+					bot:Action_AttackUnit(e, true)
+					return
+				end
+			end
+		end
+	end
+
 	-- Focus attack-target override: when commit_kill or lane_gank is active,
 	-- attack the team's priority enemy if in range. Without this the bot's
 	-- own target-picking can pick a nearer but less-valuable enemy or a
