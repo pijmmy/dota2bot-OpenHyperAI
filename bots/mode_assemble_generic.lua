@@ -8,9 +8,24 @@ local ASSEMBLE_DURATION = 5    -- stay in assemble mode for this long after ping
 local ASSEMBLE_DESIRE = 0.85   -- desire value when assembling
 local ARRIVE_RADIUS = 500      -- close enough to ping location
 local MAX_RESPOND_DIST = 3200  -- only respond if within this distance
+local TEAMPLAN_MAX_RESPOND_DIST = 5500  -- bots respond to team-plan from further
+
+-- Intents that should drive assemble behavior — these set plan.location to
+-- a group-up point. User complaint: "late game they are not defending higher
+-- ground, they should be grouping up" — previously ignored because assemble
+-- only responded to human pings.
+local ASSEMBLE_INTENTS = {
+	late_game_group = true,
+	save_ally = true,
+	contest_rosh = true,
+	contest_tormentor = true,
+	defend_base = true,
+	defend_lane = true,
+}
 
 local assembleLoc = nil
 local assembleExpireTime = 0
+local lastTeamPlanIntent = nil
 
 function GetDesire()
 	if not bot:IsAlive() then return BOT_MODE_DESIRE_NONE end
@@ -23,12 +38,38 @@ function GetDesire()
 	and GameTime() - ping.time < PING_RECENCY
 	then
 		local dist = GetUnitToLocationDistance(bot, ping.location)
-		-- Only respond if we're not already very close and not too far away
 		if dist > ARRIVE_RADIUS and dist < MAX_RESPOND_DIST then
 			assembleLoc = ping.location
 			assembleExpireTime = GameTime() + ASSEMBLE_DURATION
+			lastTeamPlanIntent = nil
 			J.ModeAnnounce(bot, 'say_assemble', ASSEMBLE_DURATION)
-			return ASSEMBLE_DESIRE
+			return J.Personality.ModulateDesire(bot, ASSEMBLE_DESIRE, 'assemble')
+		end
+	end
+
+	-- Team-plan driven assemble: when the plan has a location and intent is
+	-- one of the "converge" types, head there. This is what finally makes
+	-- late_game_group, save_ally, and contest_rosh/tormentor physically pull
+	-- bots to the action instead of just biasing desires.
+	if J.TeamPlan ~= nil and J.TeamPlan.GetCurrentPlan ~= nil then
+		local plan = J.TeamPlan.GetCurrentPlan()
+		if plan ~= nil and plan.location ~= nil
+		   and plan.validUntil ~= nil and DotaTime() < plan.validUntil
+		   and ASSEMBLE_INTENTS[plan.intent] then
+			local dist = GetUnitToLocationDistance(bot, plan.location)
+			if dist > ARRIVE_RADIUS and dist < TEAMPLAN_MAX_RESPOND_DIST then
+				-- New intent = reset the assembly target
+				if plan.intent ~= lastTeamPlanIntent then
+					lastTeamPlanIntent = plan.intent
+					assembleLoc = plan.location
+					assembleExpireTime = GameTime() + ASSEMBLE_DURATION * 2
+				else
+					-- Same intent ongoing: refresh target + expire
+					assembleLoc = plan.location
+					assembleExpireTime = math.max(assembleExpireTime, GameTime() + ASSEMBLE_DURATION)
+				end
+				return J.Personality.ModulateDesire(bot, ASSEMBLE_DESIRE, 'assemble')
+			end
 		end
 	end
 
@@ -39,10 +80,11 @@ function GetDesire()
 			assembleLoc = nil
 			return BOT_MODE_DESIRE_NONE
 		end
-		return ASSEMBLE_DESIRE
+		return J.Personality.ModulateDesire(bot, ASSEMBLE_DESIRE, 'assemble')
 	end
 
 	assembleLoc = nil
+	lastTeamPlanIntent = nil
 	return BOT_MODE_DESIRE_NONE
 end
 
