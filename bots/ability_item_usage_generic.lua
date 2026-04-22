@@ -6964,9 +6964,24 @@ X.ConsiderItemDesire['item_smoke_of_deceit'] = function(item)
 
 		if #nInRangeAlly >= 2
 		and (nMode == BOT_MODE_ROAM
-			or nMode == BOT_MODE_GANK)
+			or nMode == BOT_MODE_GANK
+			or nMode == BOT_MODE_TEAM_ROAM)
 		then
 			return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
+		end
+
+		-- Team-plan driven smoke: when we're about to commit/lane-gank and
+		-- have enough allies, smoke up before the engage. No enemies nearby
+		-- guard (isThereEnemyNearby already false) means we're not already
+		-- spotted, which is exactly when smoke matters.
+		if J.TeamPlan ~= nil and J.TeamPlan.GetCurrentPlan ~= nil then
+			local plan = J.TeamPlan.GetCurrentPlan()
+			if plan ~= nil and plan.validUntil ~= nil and DotaTime() < plan.validUntil
+			   and (plan.intent == 'commit_kill' or plan.intent == 'lane_gank' or plan.intent == 'smoke_gank')
+			   and #nInRangeAlly >= 2 then
+				sCastMotive = 'Smoke of Deceit (team-plan: ' .. plan.intent .. ')'
+				return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
+			end
 		end
 		
 		if (timeOfDay == 'day' and GetUnitToLocationDistance(bot, J.Utils.RadiantRoshanLoc) < 600)
