@@ -8320,13 +8320,13 @@ end
 
 local function UseGlyph()
 
-	if GetGlyphCooldown( ) > 0
+	-- Only first alive team member handles the shared glyph trigger.
+	-- Removed the "all players must be bots" gate — that stopped bots from
+	-- glyphing in games with a human present, which is most of the user's
+	-- games. Humans can still glyph manually via TAB at any time.
+	if GetGlyphCooldown() > 0
 		or DotaTime() < 60
 		or bot ~= GetTeamMember( 1 )
-		or not GetTeamMember( 2 ):IsBot()
-		or not GetTeamMember( 3 ):IsBot()
-		or not GetTeamMember( 4 ):IsBot()
-		or not GetTeamMember( 5 ):IsBot()
 	then
 		return
 	end
@@ -8345,16 +8345,23 @@ local function UseGlyph()
 		TOWER_BASE_2
 	}
 
+	-- Tier threshold: save glyph-worthy towers earlier. Tier 1/2 at 45%,
+	-- high-tier (T3/base) at 55% because they're the last line of defense.
 	for _, t in pairs( T1 )
 	do
 		local tower = GetTower( team, t )
 		if tower ~= nil and tower:GetHealth() > 0
-			and tower:GetHealth() / tower:GetMaxHealth() < 0.36
 			and tower:CanBeSeen()
 			and X.IsTargetedByEnemy(tower)
 		then
-			bot:ActionImmediate_Glyph( )
-			return
+			local hpPct = tower:GetHealth() / tower:GetMaxHealth()
+			local isHighTier = (t == TOWER_TOP_3 or t == TOWER_MID_3 or t == TOWER_BOT_3
+				or t == TOWER_BASE_1 or t == TOWER_BASE_2)
+			local threshold = isHighTier and 0.55 or 0.45
+			if hpPct < threshold then
+				bot:ActionImmediate_Glyph()
+				return
+			end
 		end
 	end
 
@@ -8365,11 +8372,12 @@ local function UseGlyph()
 		BARRACKS_BOT_MELEE
 	}
 
+	-- Barracks: glyph earlier (60% HP) — losing melee rax is catastrophic.
 	for _, b in pairs( MeleeBarrack )
 	do
 		local barrack = GetBarracks( team, b )
 		if barrack ~= nil and barrack:GetHealth() > 0
-			and barrack:GetHealth() / barrack:GetMaxHealth() < 0.5
+			and barrack:GetHealth() / barrack:GetMaxHealth() < 0.60
 			and X.IsTargetedByEnemy( barrack )
 		then
 			bot:ActionImmediate_Glyph( )
@@ -8379,13 +8387,64 @@ local function UseGlyph()
 
 	local Ancient = GetAncient( team )
 	if Ancient ~= nil and Ancient:GetHealth() > 0
-		and Ancient:GetHealth() / Ancient:GetMaxHealth() < 0.5
+		and Ancient:GetHealth() / Ancient:GetMaxHealth() < 0.7
 		and X.IsTargetedByEnemy( Ancient )
 	then
 		bot:ActionImmediate_Glyph( )
 		return
 	end
 
+end
+
+-- Scan: reveal an area. Used to:
+--   1. Check Roshan pit when enemies are missing
+--   2. Check high-value objectives when vision is needed
+-- Shared team cooldown; like glyph, only first alive team member triggers.
+local lastScanTime = -999
+local function UseScan()
+	local SCAN_COOLDOWN = 210  -- Valve's scan is 210s shared cooldown (7.34+)
+
+	if bot ~= GetTeamMember(1) then return end
+	if DotaTime() < 60 then return end
+
+	-- Don't scan too often (client may not expose scan CD directly; guard via our own)
+	if DotaTime() - lastScanTime < SCAN_COOLDOWN then return end
+
+	local okGS, GetScanCooldown = pcall(function() return GetScanCooldown end)
+	if okGS and GetScanCooldown ~= nil then
+		local cd = GetScanCooldown()
+		if cd ~= nil and cd > 0 then return end
+	end
+
+	-- Scan Roshan pit when we have reason to believe enemies are doing rosh.
+	-- Reason: 3+ enemies missing + our aegis is down + mid-to-late game.
+	if DotaTime() < 15 * 60 then return end
+
+	local enemyPlayers = GetTeamPlayers(GetOpposingTeam())
+	local missing = 0
+	for i = 1, #enemyPlayers do
+		local pid = enemyPlayers[i]
+		if IsHeroAlive(pid) then
+			local info = GetHeroLastSeenInfo(pid)
+			if info ~= nil and info[1] ~= nil
+			   and type(info[1].time_since_seen) == "number"
+			   and info[1].time_since_seen >= 10 then
+				missing = missing + 1
+			end
+		end
+	end
+
+	if missing >= 3 then
+		local roshLoc = J.GetCurrentRoshanLocation and J.GetCurrentRoshanLocation() or nil
+		if roshLoc ~= nil then
+			-- Check: we don't already have vision there
+			if not IsLocationVisible(roshLoc) then
+				bot:ActionImmediate_Scan(roshLoc)
+				lastScanTime = DotaTime()
+				return
+			end
+		end
+	end
 end
 
 function ItemUsageThink()
@@ -8413,6 +8472,7 @@ function BuybackUsageThink()
 	bot.lastBuybackFrameProcessTime = DotaTime()
 	if not bot:IsIllusion() then BuybackUsageComplement() end
 	if not bot:IsIllusion() then UseGlyph() end
+	if not bot:IsIllusion() then UseScan() end
 end
 
 function CourierUsageThink()
