@@ -1350,14 +1350,20 @@ X.ConsiderItemDesire["item_black_king_bar"] = function( hItem )
 	local nInRangeEnmyList = J.GetNearbyHeroes(bot, nCastRange, true, BOT_MODE_NONE )
 
 
+	-- Removed the outer "IsGoingOnSomeone or IsRetreating" gate — that
+	-- stopped BKB from firing when a bot was hooked/disabled while farming
+	-- or laning. The inner conditions already check for actual danger
+	-- (incoming projectile, incoming unit-target spell, 3+ enemies close),
+	-- so we don't need the mode-gate on top.
 	if #nInRangeEnmyList > 0
 		and not bot:IsMagicImmune()
 		and not bot:IsInvulnerable()
 		and not bot:HasModifier( 'modifier_item_lotus_orb_active' )
 		and not bot:HasModifier( 'modifier_antimage_spell_shield' )
-		and ( J.IsGoingOnSomeone( bot ) or J.IsRetreating( bot ) )
 	then
 		local nearEnemyCount = J.GetEnemyCount( bot, 600 )
+
+		-- Rooted? Pop BKB regardless — we're a sitting duck.
 		if bot:IsRooted()
 		then
 			sCastMotive = '解缠绕'
@@ -1394,9 +1400,21 @@ X.ConsiderItemDesire["item_black_king_bar"] = function( hItem )
 			return BOT_ACTION_DESIRE_HIGH, bot, sCastType, sCastMotive
 		end
 
+		-- Aggressive commit: 3+ enemies close and we're committing / fighting
+		-- (kept the mode-gate for this one because it's proactive, not reactive)
 		if J.GetEnemyCount( bot, 800 ) >= 3
+		and ( J.IsGoingOnSomeone( bot ) or J.IsRetreating( bot ) )
 		then
 			sCastMotive = '先开BKB切入'
+			return BOT_ACTION_DESIRE_HIGH, bot, sCastType, sCastMotive
+		end
+
+		-- Low HP + enemies in attack range + recently damaged = emergency BKB
+		if J.GetHP(bot) < 0.4
+		and nearEnemyCount >= 1
+		and bot:WasRecentlyDamagedByAnyHero(2)
+		then
+			sCastMotive = '紧急BKB-low HP'
 			return BOT_ACTION_DESIRE_HIGH, bot, sCastType, sCastMotive
 		end
 
