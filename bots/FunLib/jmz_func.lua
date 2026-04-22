@@ -73,6 +73,23 @@ else
     }
 end
 
+-- Save-ally detection (urgency-scored helper used by save-spell hero files).
+local okSave, SaveModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_save')
+if okSave and SaveModule then
+    J.Save = SaveModule
+else
+    print('[WARN] aba_save not loaded: '..tostring(SaveModule))
+    J.Save = {
+        GetAllyUnderThreat = function(_, _) return nil, 0 end,
+        GetAllyNeedingSave = function(_, _, _) return nil, 0 end,
+        HasSaveModifier = function(_) return false end,
+        Describe = function(_) return 'stub' end,
+        URGENCY_MODERATE = 0.7,
+        URGENCY_HIGH = 1.2,
+        URGENCY_CRITICAL = 1.8,
+    }
+end
+
 -- Game theory (networth pressure, ult readiness, adaptive thresholds).
 local okGT, GameTheoryModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_gametheory')
 if okGT and GameTheoryModule then

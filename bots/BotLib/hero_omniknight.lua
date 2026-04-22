@@ -821,6 +821,15 @@ function X.ConsiderR()
 	local hCastTarget = nil
 	local sCastMotive = nil
 
+	-- Global save signal: Guardian Angel on critically-threatened ally.
+	-- Omni's ult grants physical immunity — big clutch save. Fires for
+	-- CRITICAL urgency (multiple enemies + low HP + recent damage on a core).
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange + 50, J.Save.URGENCY_CRITICAL)
+		if saveAlly ~= nil and J.IsInRange(bot, saveAlly, nCastRange + 50) then
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, "R-save ally (urgency=" .. string.format("%.2f", urgency) .. ")"
+		end
+	end
 
 	-- Teamfight check FIRST (highest priority -- save multiple allies)
 	for i = 1, #GetTeamPlayers( GetTeam() )

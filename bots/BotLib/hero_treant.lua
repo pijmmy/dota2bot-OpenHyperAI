@@ -455,6 +455,16 @@ function X.ConsiderLivingArmor()
         return BOT_ACTION_DESIRE_NONE, nil
     end
 
+    -- Global save signal: Living Armor an ally being committed on.
+    -- Global cast range (~1000+ in practice); fires at MODERATE urgency since
+    -- the shield is cheap and passive damage block is always useful.
+    if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+        local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, 2500, J.Save.URGENCY_MODERATE)
+        if saveAlly ~= nil then
+            return BOT_ACTION_DESIRE_HIGH, saveAlly
+        end
+    end
+
     -- Offensive Ally
     local strongestAlly = nil
     local off = 0

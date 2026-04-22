@@ -528,6 +528,16 @@ function X.ConsiderR()
 	local nDamageType = DAMAGE_TYPE_MAGICAL
 	local nInRangeEnemyList = J.GetNearbyHeroes(bot, nCastRange, true, BOT_MODE_NONE )
 
+	-- Global save signal: False Promise on an ally being committed on.
+	-- Oracle's ult is a critical save — fire early when an ally is clearly
+	-- being dove (urgency >= CRITICAL means multiple enemies + low HP + recent damage).
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange + 50, J.Save.URGENCY_CRITICAL)
+		if saveAlly ~= nil and J.IsInRange(bot, saveAlly, nCastRange + 50) then
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, "R-save ally critical (urgency=" .. string.format("%.2f", urgency) .. ")"
+		end
+	end
+
 
 	for _, ally in pairs( hAllyList )
 	do

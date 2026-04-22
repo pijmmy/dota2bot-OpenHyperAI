@@ -609,6 +609,16 @@ function X.ConsiderW()
 	local hCastTarget = nil
 	local sCastMotive = nil
 
+	-- Global save signal: pre-emptively grave an ally being committed on.
+	-- Fires BEFORE the existing projectile-kill / low-HP logic below, so we
+	-- save earlier in the dive, not only when the ally is at 20% HP.
+	if J.Save ~= nil and J.Save.GetAllyNeedingSave ~= nil then
+		local saveAlly, urgency = J.Save.GetAllyNeedingSave(bot, nCastRange + 200, J.Save.URGENCY_HIGH)
+		if saveAlly ~= nil and J.IsInRange(bot, saveAlly, nCastRange + 200) then
+			return BOT_ACTION_DESIRE_HIGH, saveAlly, "W-save ally under threat (urgency=" .. string.format("%.2f", urgency) .. ")"
+		end
+	end
+
 	-- Preemptive grave: check if ally will die from incoming attack projectiles
 	for _, npcAlly in pairs( hAllyList )
 	do
