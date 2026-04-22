@@ -132,19 +132,22 @@ function ____exports.GetThresholds()
         ultReady = ultReady,
     }
 
-    -- Ahead: press the advantage
+    -- Ahead: press the advantage. 1-ally commit is intentional — winning team
+    -- should be punishing mistakes aggressively, not playing safe.
     if pressure > 0.3 then
         t.commitAllyThreshold = 1
         t.pushAllyThreshold = 3
         t.roshAllyThreshold = 2
     elseif pressure < -0.3 then
-        -- Behind: be conservative
-        t.commitAllyThreshold = 3
-        t.pushAllyThreshold = 5
-        t.roshAllyThreshold = 4
+        -- Behind: slightly conservative, but NOT turtle. Desperate teams
+        -- need to force fights to get back, otherwise losing spirals.
+        -- (Previous version's 3/5/4 thresholds locked losing bots into farm.)
+        t.commitAllyThreshold = 2
+        t.pushAllyThreshold = 4
+        t.roshAllyThreshold = 3
     end
 
-    -- Ult-heavy team: commits and pushes are cheaper (hard disables available)
+    -- Ult-heavy team: commits and pushes are cheaper (hard disables available).
     if ultReady >= 3 then
         t.commitAllyThreshold = math.max(1, t.commitAllyThreshold - 1)
         t.pushAllyThreshold = math.max(3, t.pushAllyThreshold - 1)
@@ -162,14 +165,20 @@ end
 -- so aggressive modes scale up when ahead, defensive when behind.
 -- ============================================================
 
+-- Pressure bias magnitudes deliberately muted.
+-- Previously stronger values (e.g., retreat 0.90 at +1, 1.10 at -1) caused
+-- a losing-spiral: behind team retreated more + farmed more -> kept losing.
+-- The formula mult = 1 + pressure * (target - 1) symmetric around 1 means
+-- losing teams get the inverse of winning effects. Keep magnitudes small
+-- so personality + team-plan stay the dominant signals; pressure is just
+-- a gentle nudge, not a strait-jacket.
 local PRESSURE_BIAS = {
-    -- When pressure is +1.0: these multipliers; at 0, they're 1.0; at -1.0, inverted.
-    push      = 1.15,
-    team_roam = 1.10,
-    roam      = 1.10,
-    roshan    = 1.15,
-    retreat   = 0.90,
-    farm      = 0.95,
+    push      = 1.08,
+    team_roam = 1.05,
+    roam      = 1.05,
+    roshan    = 1.08,
+    retreat   = 0.95,
+    farm      = 0.97,
     defend    = 1.0,
 }
 

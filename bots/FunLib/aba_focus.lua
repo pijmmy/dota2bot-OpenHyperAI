@@ -145,6 +145,10 @@ local function computeFocus()
         end
     end
 
+    -- Reverted to 0.8 — user is crushing the enemy bots (3 vs 30). Making
+    -- focus stricter would weaken enemy commits further. We WANT the enemy
+    -- bots to commit aggressively on the human; that's what makes the game
+    -- competitive.
     if bestResult ~= nil and bestResult.score >= 0.8 then
         return bestResult
     end
