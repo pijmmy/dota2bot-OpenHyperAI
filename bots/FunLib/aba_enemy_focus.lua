@@ -42,6 +42,44 @@ local currentEnemyFocus = {
 }
 
 -- ============================================================
+-- Big-ult modifiers — if ally has any of these, save_ally fires
+-- regardless of nearby enemy count (single-enemy big-ult commits
+-- like Chrono / Duel / Doom need the same response).
+-- ============================================================
+
+local BIG_ULT_MODIFIERS = {
+    'modifier_faceless_void_chronosphere_freeze',
+    'modifier_enigma_black_hole_pull',
+    'modifier_enigma_black_hole_thinker',
+    'modifier_magnataur_reverse_polarity',
+    'modifier_legion_commander_duel',
+    'modifier_tidehunter_ravage_slow',
+    'modifier_doom_bringer_doom',
+    'modifier_shadow_demon_disruption',
+    'modifier_bane_fiends_grip',
+    'modifier_bane_nightmare',
+    'modifier_shadow_shaman_shackles',
+    'modifier_beastmaster_primal_roar',
+    'modifier_lion_impale',
+    'modifier_necrolyte_reapers_scythe',
+    'modifier_pudge_dismember',
+    'modifier_sandking_burrowstrike',
+    'modifier_kunkka_ghostship_damage_delay',
+    'modifier_disruptor_static_storm',
+    'modifier_outworld_destroyer_astral_imprisonment_prison',
+    'modifier_ember_spirit_searing_chains',
+    'modifier_item_aeon_disk_buff',  -- ally used aeon — they're in serious trouble
+}
+
+local function hasBigUltModifier(unit)
+    for i = 1, #BIG_ULT_MODIFIERS do
+        local ok, has = pcall(function() return unit:HasModifier(BIG_ULT_MODIFIERS[i]) end)
+        if ok and has then return true, BIG_ULT_MODIFIERS[i] end
+    end
+    return false, nil
+end
+
+-- ============================================================
 -- Scoring
 -- ============================================================
 
@@ -54,22 +92,28 @@ local function scoreAllyInDanger(ally)
 
     -- Count attacking enemies within threat radius
     local enemies = J.GetNearbyHeroes(ally, THREAT_RADIUS, true, BOT_MODE_NONE)
-    if enemies == nil then return 0, 0 end
+    if enemies == nil then enemies = {} end
     local attackingCount = 0
     for i = 1, #enemies do
         local e = enemies[i]
         if J.IsValidHero(e) and not J.IsSuspiciousIllusion(e) then
-            -- Attacking us OR recently damaged us counts
             local target = nil
             local okT, t = pcall(function() return e:GetAttackTarget() end)
             if okT then target = t end
             if target == ally then
                 attackingCount = attackingCount + 1
             elseif ally:WasRecentlyDamagedByAnyHero(2.5) then
-                -- Within radius + ally recently hit = probably attacking
                 attackingCount = attackingCount + 1
             end
         end
+    end
+
+    -- Big-ult shortcut: a single-target channel like Doom / Dismember / Duel
+    -- is a commit even with 1 enemy. Force-trigger with high urgency.
+    local caught, modName = hasBigUltModifier(ally)
+    if caught then
+        local urgency = 2.0 + (1 - hp) + 0.3 * attackingCount
+        return urgency, math.max(attackingCount, 1)
     end
 
     if attackingCount < MIN_ENEMIES then return 0, attackingCount end
@@ -83,7 +127,6 @@ local function scoreAllyInDanger(ally)
     local okC, core = pcall(function() return J.IsCore(ally) end)
     if okC and core then isCore = 1 end
 
-    -- Multi-enemy attack with recent damage = high urgency
     local urgency = (1 - hp)
                   + 0.35 * attackingCount
                   + 0.40 * recentlyHit
