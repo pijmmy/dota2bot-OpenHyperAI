@@ -372,9 +372,10 @@ local function computePlan(bot)
         return freshPlan("defend_lane", threat.lane, threat.loc, "lane under attack")
     end
 
-    -- 2.5 COMMIT_KILL: focus target exists + ≥2 allies near focus
-    -- This fires between defend and contest_rosh so a juicy pick takes priority
-    -- over farming/pushing but not over base defense.
+    -- 2.5 COMMIT_KILL: focus target exists + ≥ threshold allies near focus
+    -- (threshold adapts to pressure and focus quality — a very high-score
+    -- focus lowers the threshold by 1, so a juicy isolated-low-HP core
+    -- triggers commit with just 1 ally nearby rather than requiring 2).
     --
     -- 2.6 LANE_GANK: during laning, a 1v1 on a low-HP adjacent-lane enemy
     -- is still a commit — pro supports roam solo all the time. Looser than
@@ -392,9 +393,17 @@ local function computePlan(bot)
             if target ~= nil and target.unit ~= nil and now < target.validUntil then
                 local focusLoc = target.unit:GetLocation()
                 local nearAllies = jmz().GetAlliesNearLoc(focusLoc, 2000)
-                if nearAllies ~= nil and #nearAllies >= thresholds.commitAllyThreshold then
+                -- Adaptive effective threshold: very high-quality focus (score >= 2)
+                -- reduces required ally count by 1 (down to minimum 1). Rewards
+                -- isolation + low HP + core value.
+                local effThreshold = thresholds.commitAllyThreshold
+                if (target.score or 0) >= 2.0 then
+                    effThreshold = math.max(1, effThreshold - 1)
+                end
+                if nearAllies ~= nil and #nearAllies >= effThreshold then
                     return freshPlan("commit_kill", nil, focusLoc,
-                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(thresholds.commitAllyThreshold))
+                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(effThreshold)
+                        .. " score=" .. string.format("%.2f", target.score or 0))
                 end
                 -- Lane-gank path: laning phase + low-HP focus + at least 1 close ally
                 local okLaning, isLaning = pcall(function() return jmz().IsInLaningPhase() end)
