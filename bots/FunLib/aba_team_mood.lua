@@ -81,26 +81,31 @@ end
 
 function ____exports.GetMoodMultiplier(mode)
     local m = getMood()
+    local result = 1.0
     if mode == "farm" then
-        return m.patience
+        result = m.patience
     elseif mode == "roam" or mode == "team_roam" then
-        return m.aggression * m.gank_eagerness
+        -- Two-axis compound; clamp to documented envelope
+        result = m.aggression * m.gank_eagerness
     elseif mode == "push" then
-        return m.push_eagerness
+        result = m.push_eagerness
     elseif mode == "defend" then
-        return m.defensive_lean
+        result = m.defensive_lean
     elseif mode == "retreat" then
-        return m.defensive_lean
+        result = m.defensive_lean
     elseif mode == "roshan" then
-        return m.rosh_eagerness
+        result = m.rosh_eagerness
     elseif mode == "assemble" then
-        return m.coordination
+        result = m.coordination
     elseif mode == "laning" then
-        -- Early-tempo teams are more aggressive in lane (harass less farm)
-        if m.tempo == "early" then return 0.9 end
-        if m.tempo == "late" then return 1.1 end  -- protect lane phase
+        if m.tempo == "early" then result = 0.9
+        elseif m.tempo == "late" then result = 1.1 end
     end
-    return 1.0
+    -- Clamp to keep stack bounded (audit caught roam/team_roam reaching 1.69x
+    -- via aggression*gank_eagerness — outside the stated 0.7-1.4x envelope).
+    if result < 0.65 then result = 0.65 end
+    if result > 1.40 then result = 1.40 end
+    return result
 end
 
 -- ============================================================
