@@ -477,6 +477,36 @@ end
 function Think()
 	if J.CanNotUseAction(bot) then return end
 	if J.Utils.IsBotThinkingMeaningfulAction(bot, Customize.ThinkLess, "farm") then return end
+
+	-- Support autopilot: at :50-:55 of each minute, pos 4/5 (if not busy)
+	-- detour to nearest stack camp. At :15-:18 / :45-:48, pos 5 (if not busy)
+	-- detours to nearest pull camp. Real Dota support behavior.
+	if J.SupportAuto ~= nil and J.SupportAuto.GetSupportTask ~= nil then
+		local task, taskLoc, motive = J.SupportAuto.GetSupportTask(bot)
+		if task ~= nil and taskLoc ~= nil then
+			local d = GetUnitToLocationDistance(bot, taskLoc)
+			if d > 250 then
+				bot:Action_MoveToLocation(taskLoc)
+				return
+			end
+			-- At the camp: attack the strongest creep to aggro the camp
+			local creeps = bot:GetNearbyCreeps(700, true)
+			if creeps ~= nil and #creeps > 0 then
+				local strongest = creeps[1]
+				local strongestHP = strongest:GetHealth()
+				for i = 2, #creeps do
+					local c = creeps[i]
+					if c:GetHealth() > strongestHP then
+						strongest = c
+						strongestHP = c:GetHealth()
+					end
+				end
+				bot:Action_AttackUnit(strongest, true)
+				return
+			end
+		end
+	end
+
 	sec = math.floor(DotaTime()) % 60
 	if runMode
 	then

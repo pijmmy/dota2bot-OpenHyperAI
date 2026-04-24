@@ -106,6 +106,25 @@ else
     }
 end
 
+-- Support autopilot (stacking + pulling timings for pos 4/5)
+local okSA, SupportAutoModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_support_auto')
+if okSA and SupportAutoModule then
+    J.SupportAuto = SupportAutoModule
+else
+    print('[WARN] aba_support_auto not loaded: '..tostring(SupportAutoModule))
+    J.SupportAuto = {
+        IsStackingWindow = function(_) return false end,
+        IsPullingWindow = function(_) return false end,
+        IsStackerRole = function(_) return false end,
+        IsPullerRole = function(_) return false end,
+        IsBusy = function(_) return true end,
+        GetNearestStackCamp = function(_) return nil end,
+        GetNearestPullCamp = function(_) return nil end,
+        GetSupportTask = function(_) return nil end,
+        Describe = function(_) return 'stub' end,
+    }
+end
+
 -- Per-match team mood (aggression / patience / coordination etc.) — adds
 -- per-game variance on top of per-bot personality.
 local okMood, TeamMoodModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_team_mood')
