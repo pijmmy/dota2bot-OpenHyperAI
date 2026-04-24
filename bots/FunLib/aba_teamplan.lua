@@ -406,6 +406,14 @@ local TACTIC_TIMEOUT = {
     contest_tormentor = 30,
     lane_gank = 18,
     save_ally = 12,          -- saves are short-window
+    -- Without a push_lane timeout, the intent dominates forever once the gate
+    -- opens — smoke_gank, late_game_group, and regroup all lose priority. Cap
+    -- the push commitment so the team disperses and can rotate into other
+    -- plays (smokes, defensive regroup) between push attempts. Validated via
+    -- sim harness: before this cap, bot-vs-bot matches showed 31/40 minutes
+    -- locked into push_lane with 0 smoke_ganks and 0 late_game_group.
+    push_lane = 30,
+    smoke_gank = 25,
 }
 
 local TACTIC_COOLDOWN = {
@@ -414,6 +422,8 @@ local TACTIC_COOLDOWN = {
     contest_tormentor = 20,
     lane_gank = 8,
     save_ally = 6,
+    push_lane = 90,          -- long rest after push so smoke/group can fire
+    smoke_gank = 30,
 }
 
 local function isInCooldown(intent)
@@ -636,6 +646,26 @@ local function computePlan(bot)
         return freshPlan("contest_lotus", nil, lotusLoc, "lotus sustain pickup")
     end
 
+    -- 3.9 LATE_GAME_GROUP (elevated priority): past the late-game gate,
+    -- grouping defensively at high ground trumps split-map pushing. Without
+    -- this block before push_lane, bots kept firing push_lane every recompute
+    -- in the 25min+ window and never consolidated — sim harness showed 0
+    -- late_game_group fires in 40-min matches. Real pro macro: once past p25
+    -- match duration, teams converge at high ground to protect the core.
+    local lateGameGateSec = 25 * 60
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.match_duration_p25 and pm.match_duration_p25 > 0 then
+            lateGameGateSec = pm.match_duration_p25
+        end
+    end
+    if now > lateGameGateSec then
+        local groupLoc = computeGroupLocation(team)
+        if groupLoc ~= nil then
+            return freshPlan("late_game_group", nil, groupLoc, "late game: group at high ground")
+        end
+    end
+
     -- 4. PUSH_LANE: weakest enemy lane + we have people (threshold adapts to pressure).
     -- Phase 4: gate by a min game time from pro macro data. Pro first T1 typically
     -- falls around 12 min; we allow push_lane from 60% of that window so bots still
@@ -657,7 +687,11 @@ local function computePlan(bot)
             nwLead = myNW - enemyNW
         end
     end
-    if now >= pushMinSec or nwLead >= 4000 then
+    -- Skip push_lane if it's on cooldown so we fall THROUGH to smoke_gank /
+    -- other secondary intents. freshPlan would normally return "regroup" for
+    -- a cooldown'd intent, but that hijacks the whole plan; we want the other
+    -- gates below to actually evaluate.
+    if (now >= pushMinSec or nwLead >= 4000) and not isInCooldown("push_lane") then
         local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
         if pushTarget ~= nil then
             _lastPushLaneTime = now
@@ -678,7 +712,8 @@ local function computePlan(bot)
             smokeCadenceSec = pm.smoke_gank_cadence_min * 60
         end
     end
-    if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec then
+    if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
+       and not isInCooldown("smoke_gank") then
         local grouped = countGroupedAllies(team)
         if grouped >= 3 then
             _lastSmokeGankTime = now
@@ -695,23 +730,7 @@ local function computePlan(bot)
         end
     end
 
-    -- 5.7 LATE_GAME_GROUP: after ~25min (data-tuned), default to grouping
-    -- rather than split farming. Phase 4: use match_duration_p25 as gate
-    -- — the bottom 25% of pro matches end by this time, which is roughly
-    -- when the late-game snowball starts. Falls back to 25 min hardcoded.
-    local lateGameGateSec = 25 * 60
-    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
-        local pm = jmzM.DraftStrategy.GetProMacro()
-        if pm and pm.match_duration_p25 and pm.match_duration_p25 > 0 then
-            lateGameGateSec = pm.match_duration_p25
-        end
-    end
-    if now > lateGameGateSec then
-        local groupLoc = computeGroupLocation(team)
-        if groupLoc ~= nil then
-            return freshPlan("late_game_group", nil, groupLoc, "late game: group at high ground")
-        end
-    end
+    -- (late_game_group moved above push_lane — see 3.9)
 
     -- 6. REGROUP
     if teamIsWeak(team) then

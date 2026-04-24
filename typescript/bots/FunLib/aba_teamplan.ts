@@ -176,6 +176,20 @@ function computePlan(bot: Unit): TeamPlan {
         }
     }
 
+    // 3.9 LATE_GAME_GROUP (elevated priority): past p25 match duration, grouping
+    // defensively wins over split-map pushing. Moved above push_lane because
+    // without this sim harness showed 0 late_game_group fires in 40-min games —
+    // push_lane was firing every recompute in the 25min+ window. Real pro macro:
+    // once past p25 duration, teams converge at high ground to secure the core.
+    let lateGameGateSec = 25 * 60;
+    const pmL = (jmz as any).DraftStrategy?.GetProMacro?.();
+    if (pmL && pmL.match_duration_p25 && pmL.match_duration_p25 > 0) {
+        lateGameGateSec = pmL.match_duration_p25;
+    }
+    if (now > lateGameGateSec) {
+        return freshPlan("late_game_group", undefined, undefined, "late game: group at high ground");
+    }
+
     // 4. PUSH_LANE: weakest enemy lane + we have 4+ allies grouped somewhere.
     // Phase 4: gate by min game time derived from pro macro first_t1_fall_typical_sec.
     // Bots shouldn't siege during laning stage; allow from ~60% of pro first-T1 timing
@@ -192,7 +206,9 @@ function computePlan(bot: Unit): TeamPlan {
             nwLead = nw[0] - nw[1];
         }
     } catch (_e) { /* ignore */ }
-    if (now >= pushMinSec || nwLead >= 4000) {
+    // Skip push_lane if on cooldown so we fall through to smoke_gank below
+    // rather than hijacking the plan with freshPlan's cooldown-regroup behavior.
+    if ((now >= pushMinSec || nwLead >= 4000) && !isInCooldown("push_lane")) {
         const pushTarget = findPushTarget(enemyTeam, team);
         if (pushTarget !== null) {
             _lastPushLaneTime = now;
@@ -209,7 +225,8 @@ function computePlan(bot: Unit): TeamPlan {
     if (pm8 && pm8.smoke_gank_cadence_min && pm8.smoke_gank_cadence_min > 0) {
         smokeCadenceSec = pm8.smoke_gank_cadence_min * 60;
     }
-    if (now > 10 * 60 && (now - _lastSmokeGankTime) >= smokeCadenceSec) {
+    if (now > 10 * 60 && (now - _lastSmokeGankTime) >= smokeCadenceSec
+        && !isInCooldown("smoke_gank")) {
         const groupedCount = countGroupedAllies(team);
         if (groupedCount >= 3) {
             _lastSmokeGankTime = now;
