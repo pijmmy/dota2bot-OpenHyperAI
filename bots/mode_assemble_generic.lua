@@ -51,11 +51,15 @@ function GetDesire()
 	-- one of the "converge" types, head there. This is what finally makes
 	-- late_game_group, save_ally, and contest_rosh/tormentor physically pull
 	-- bots to the action instead of just biasing desires.
+	--
+	-- Per-role gate: only roles listed in INTENT_ROLES for this intent respond.
+	-- Prevents 5-man groupups for small objectives like lotus.
 	if J.TeamPlan ~= nil and J.TeamPlan.GetCurrentPlan ~= nil then
 		local plan = J.TeamPlan.GetCurrentPlan()
 		if plan ~= nil and plan.location ~= nil
 		   and plan.validUntil ~= nil and DotaTime() < plan.validUntil
-		   and ASSEMBLE_INTENTS[plan.intent] then
+		   and ASSEMBLE_INTENTS[plan.intent]
+		   and (J.TeamPlan.RoleRespondsToIntent == nil or J.TeamPlan.RoleRespondsToIntent(bot)) then
 			local dist = GetUnitToLocationDistance(bot, plan.location)
 			if dist > ARRIVE_RADIUS and dist < TEAMPLAN_MAX_RESPOND_DIST then
 				-- New intent = reset the assembly target

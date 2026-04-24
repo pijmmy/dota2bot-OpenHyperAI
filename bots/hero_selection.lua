@@ -982,12 +982,10 @@ end
 local fretbotsAutoInitialized = false
 local function AutoInitFretBots()
 	if fretbotsAutoInitialized then return end
-	-- Only one team's hero_selection.lua instance needs to init (global side effects).
-	-- Gate to radiant side to avoid double-loading.
-	if GetTeam() ~= TEAM_RADIANT then
-		fretbotsAutoInitialized = true
-		return
-	end
+	-- Both teams try to init — FretBots has its own isFretbotsBeingInitialized
+	-- guard that prevents actual duplicate init damage. Bots on Dire side
+	-- previously weren't getting FretBots treatment because init was gated
+	-- to Radiant only.
 	local gs = GetGameState()
 	if gs == nil or gs < GAME_STATE_HERO_SELECTION then return end
 
@@ -998,13 +996,14 @@ local function AutoInitFretBots()
 	end
 
 	fretbotsAutoInitialized = true
-	print('[OHA] Auto-activating FretBots mode...')
+	local teamName = GetTeam() == TEAM_RADIANT and 'Radiant' or 'Dire'
+	print('[OHA] Auto-activating FretBots on '..teamName..' side...')
 	local ok, err = pcall(function() require 'bots.FretBots' end)
 	if not ok then
-		print('[OHA][WARN] FretBots auto-init failed: '..tostring(err))
+		print('[OHA][WARN] FretBots auto-init failed on '..teamName..': '..tostring(err))
 		print('[OHA]       Fall back to manual: sv_cheats 1; script_reload_code bots/FretBots')
 	else
-		print('[OHA] FretBots auto-activated successfully.')
+		print('[OHA] FretBots auto-activated on '..teamName..' side successfully.')
 	end
 end
 

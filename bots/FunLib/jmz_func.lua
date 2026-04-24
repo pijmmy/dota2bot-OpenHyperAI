@@ -6149,48 +6149,81 @@ function J.IsHumanInLoc(vLoc, nRadius)
 	return false
 end
 
--- Cache the last-known Roshan location. Updated whenever we see Rosh in
--- the unit list. This is more accurate than the time-of-day heuristic
--- because Roshan alternates pits per spawn (independent of day/night).
+-- Roshan location tracker.
+-- Caches actual sightings, auto-invalidates when bots arrive at cached
+-- location and Rosh isn't actually there, alternates pits on failed
+-- attempts. Fixes "bots camp wrong pit for 15 min" bug.
 local _lastSeenRoshanLoc = nil
 local _lastSeenRoshanTime = -999
-local _ROSHAN_SEEN_TTL = 120  -- 2 min — long enough that we remember after he goes back into fog
+local _ROSHAN_SEEN_TTL = 30   -- 30s (was 120) — faster invalidation
+local _roshanPitAttempt = 0    -- alternates 0/1 for fallback-pit selection
+local _lastPitVerifyTime = -999
 
-function J.GetCurrentRoshanLocation()
-	-- Try to find the actual Roshan on the map (works when in vision)
+local function roshVisibleInList()
 	local ok, units = pcall(function() return GetUnitList(UNIT_LIST_ENEMIES) end)
-	if ok and units ~= nil then
-		for i = 1, #units do
-			local u = units[i]
-			if u ~= nil and not u:IsNull() and u:IsAlive() then
-				local okN, name = pcall(function() return u:GetUnitName() end)
-				if okN and name == 'npc_dota_roshan' then
-					_lastSeenRoshanLoc = u:GetLocation()
-					_lastSeenRoshanTime = DotaTime()
-					return _lastSeenRoshanLoc
-				end
-			end
+	if not ok or units == nil then return nil end
+	for i = 1, #units do
+		local u = units[i]
+		if u ~= nil and not u:IsNull() and u:IsAlive() then
+			local okN, name = pcall(function() return u:GetUnitName() end)
+			if okN and name == 'npc_dota_roshan' then return u end
 		end
 	end
+	return nil
+end
 
-	-- Recently seen but no longer in vision: trust the cache
-	if _lastSeenRoshanLoc ~= nil and (DotaTime() - _lastSeenRoshanTime) < _ROSHAN_SEEN_TTL then
+function J.GetCurrentRoshanLocation()
+	-- 1) Try to find Roshan in the current unit list (works when in vision)
+	local rosh = roshVisibleInList()
+	if rosh ~= nil then
+		_lastSeenRoshanLoc = rosh:GetLocation()
+		_lastSeenRoshanTime = DotaTime()
 		return _lastSeenRoshanLoc
 	end
 
-	-- Fallback heuristic: time-of-day. Imperfect since 7.34+ (Rosh alternates
-	-- pits per spawn, not per day cycle) — but better than always one pit.
-	if J.CheckTimeOfDay() == 'day' then
-		return J.Utils.DireRoshanLoc
-	else
+	-- 2) Short-lived cache: trust recent sighting
+	if _lastSeenRoshanLoc ~= nil and (DotaTime() - _lastSeenRoshanTime) < _ROSHAN_SEEN_TTL then
+		-- Self-invalidation: if bots are AT the cached pit + rosh not visible,
+		-- the cache is stale (rosh has probably moved). Invalidate and fall through.
+		local ally = nil
+		for i = 1, 5 do
+			local m = GetTeamMember(i)
+			if m ~= nil and m:IsAlive() then ally = m; break end
+		end
+		if ally ~= nil then
+			local distToCache = GetUnitToLocationDistance(ally, _lastSeenRoshanLoc)
+			if distToCache < 800 then
+				-- We're at the cached location but didn't see Rosh — bad cache
+				_lastSeenRoshanLoc = nil
+				_lastSeenRoshanTime = -999
+				-- Force alternate pit next time
+				_roshanPitAttempt = _roshanPitAttempt + 1
+			else
+				return _lastSeenRoshanLoc
+			end
+		else
+			return _lastSeenRoshanLoc
+		end
+	end
+
+	-- 3) Fallback: alternate pits. First try = time-of-day heuristic (reasonable guess),
+	-- subsequent attempts alternate. This way if the first guess is wrong we'll
+	-- try the other pit on the next contest_rosh.
+	local timeOfDay = J.CheckTimeOfDay()
+	if _roshanPitAttempt % 2 == 0 then
+		if timeOfDay == 'day' then return J.Utils.DireRoshanLoc end
 		return J.Utils.RadiantRoshanLoc
+	else
+		if timeOfDay == 'day' then return J.Utils.RadiantRoshanLoc end
+		return J.Utils.DireRoshanLoc
 	end
 end
 
--- Reset the cache (call when we know Roshan died)
+-- Reset cache (call when we know Roshan died or we've given up on a pit)
 function J.OnRoshanKilled()
 	_lastSeenRoshanLoc = nil
 	_lastSeenRoshanTime = -999
+	_roshanPitAttempt = _roshanPitAttempt + 1
 end
 
 -- Returns BOTH possible Roshan locations — for callers that want to

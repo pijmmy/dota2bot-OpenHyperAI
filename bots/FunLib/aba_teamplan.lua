@@ -334,6 +334,52 @@ local function countMissingEnemies(enemyTeam, staleSeconds)
 end
 
 -- ============================================================
+-- Per-role intent routing.
+--
+-- Critical design fix after user feedback: "5 bots all group up at ruins,
+-- no unpredictability, players don't act like this." The issue: intents
+-- were team-wide — contest_lotus fired and ALL 5 bots went to ruins. In
+-- real Dota, only pos 4/5 collect ruins; pos 1/2 farm/mid.
+--
+-- Each intent now specifies which roles (1-5) should respond to it.
+-- Bots whose role isn't in the intent's roles treat the plan as "farm"
+-- (no location bias). This prevents 5-man groupups for small objectives.
+-- ============================================================
+
+local INTENT_ROLES = {
+    defend_base       = {1,2,3,4,5},  -- everyone defends the ancient
+    defend_lane       = {1,2,3,4,5},  -- everyone defends a threatened rax
+    save_ally         = {1,2,3,4,5},  -- anyone nearby collapses
+    commit_kill       = {1,2,3,4,5},  -- full commit
+    lane_gank         = {4,5,2},      -- supports + mid rotate for ganks, NOT pos 1/3
+    contest_rosh      = {1,2,3,4,5},  -- team fight for rosh
+    contest_tormentor = {2,3,4,5},    -- mid/off/supports; pos 1 farm instead
+    contest_lotus     = {4,5},        -- ONLY supports collect lotus — fixes ruins groupup
+    push_lane         = {1,2,3,4,5},  -- 5-man push
+    smoke_gank        = {4,5,3},      -- mostly supports + offlaner
+    regroup           = {1,2,3,4,5},
+    late_game_group   = {1,2,3,4,5},  -- everyone groups late game
+    farm              = {1,2,3,4,5},  -- fallback
+}
+
+-- Check if the given role (1-5) should respond to the plan's intent.
+-- Used by mode_assemble and other converge-type modes.
+local function roleRespondsToIntent(role, intent)
+    local roles = INTENT_ROLES[intent]
+    if roles == nil then return true end  -- unknown intent: default to respond
+    for i = 1, #roles do
+        if roles[i] == role then return true end
+    end
+    return false
+end
+
+-- Exposed helper
+local function computeRoleShouldRespond(bot)
+    local plan = nil  -- fill below
+    return roleRespondsToIntent, plan
+end
+
+-- ============================================================
 -- Tactic exhaustion / cooldown — give up failed commits
 --
 -- User feedback: "they should try once and move to the other spot or
@@ -641,6 +687,18 @@ end
 
 function ____exports.GetCurrentPlan()
     return currentPlan
+end
+
+-- Returns true if the given bot's role should follow the current plan's
+-- intent. Bots whose role isn't in the intent's target roles should
+-- ignore the plan location and act on their own priorities.
+function ____exports.RoleRespondsToIntent(bot)
+    if bot == nil or currentPlan == nil or currentPlan.intent == nil then return true end
+    local J = jmz()
+    if J == nil or J.GetPosition == nil then return true end
+    local ok, pos = pcall(function() return J.GetPosition(bot) end)
+    if not ok or pos == nil then return true end
+    return roleRespondsToIntent(pos, currentPlan.intent)
 end
 
 function ____exports.MaybeRecompute(bot)
