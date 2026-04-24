@@ -176,6 +176,24 @@ function computePlan(bot: Unit): TeamPlan {
         }
     }
 
+    // 3.8 SMOKE_GANK (overdue bypass): fire smoke even in late-game window when
+    // cadence is due. Pros smoke FROM the high-ground clump — the two aren't
+    // mutually exclusive. Without this block, late_game_group starves smoke
+    // of all post-25min windows (sim showed ~8 events vs pro 13.3).
+    let smokeCadenceSecA = 180;
+    const pmSA = (jmz as any).DraftStrategy?.GetProMacro?.();
+    if (pmSA && pmSA.smoke_gank_cadence_min && pmSA.smoke_gank_cadence_min > 0) {
+        smokeCadenceSecA = pmSA.smoke_gank_cadence_min * 60;
+    }
+    if (now > 10 * 60 && (now - _lastSmokeGankTime) >= smokeCadenceSecA
+        && !isInCooldown("smoke_gank")) {
+        const groupedCountA = countGroupedAllies(team);
+        if (groupedCountA >= 3) {
+            _lastSmokeGankTime = now;
+            return freshPlan("smoke_gank", undefined, undefined, "grouped, cadence overdue");
+        }
+    }
+
     // 3.9 LATE_GAME_GROUP (elevated priority): past p25 match duration, grouping
     // defensively wins over split-map pushing. Moved above push_lane because
     // without this sim harness showed 0 late_game_group fires in 40-min games —

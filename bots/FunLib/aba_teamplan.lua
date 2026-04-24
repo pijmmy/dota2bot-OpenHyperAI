@@ -646,6 +646,27 @@ local function computePlan(bot)
         return freshPlan("contest_lotus", nil, lotusLoc, "lotus sustain pickup")
     end
 
+    -- 3.8 SMOKE_GANK (overdue bypass): fire smoke even in late-game group
+    -- window when cadence has come around. Pros smoke FROM the high-ground
+    -- grouping — the two aren't mutually exclusive. Without this block the
+    -- late_game_group gate below starves smoke_gank of all post-25min
+    -- windows, flattening smoke events at ~8/match vs pro expectation 13.
+    local smokeCadenceSec = 180
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.smoke_gank_cadence_min and pm.smoke_gank_cadence_min > 0 then
+            smokeCadenceSec = pm.smoke_gank_cadence_min * 60
+        end
+    end
+    if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
+       and not isInCooldown("smoke_gank") then
+        local grouped = countGroupedAllies(team)
+        if grouped >= 3 then
+            _lastSmokeGankTime = now
+            return freshPlan("smoke_gank", nil, nil, "grouped, cadence overdue")
+        end
+    end
+
     -- 3.9 LATE_GAME_GROUP (elevated priority): past the late-game gate,
     -- grouping defensively at high ground trumps split-map pushing. Without
     -- this block before push_lane, bots kept firing push_lane every recompute
