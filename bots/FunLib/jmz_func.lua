@@ -125,8 +125,30 @@ else
     }
 end
 
+-- Draft-analyzed match strategy (replaces random team_mood with data-driven).
+-- Uses scraped OpenDota hero stats (bots/FunLib/data/*.lua) to classify our
+-- team's composition and pick a strategy grounded in the actual draft.
+local okDS, DraftStrategyModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_draft_strategy')
+if okDS and DraftStrategyModule then
+    J.DraftStrategy = DraftStrategyModule
+else
+    print('[WARN] aba_draft_strategy not loaded: '..tostring(DraftStrategyModule))
+    J.DraftStrategy = {
+        GetStrategy = function() return nil end,
+        GetStrategyName = function() return "teamfight_mid" end,
+        GetStrategyValues = function() return nil end,
+        GetEnemyStrategy = function() return "teamfight_mid" end,
+        GetMatchupWinrate = function(_, _) return nil end,
+        GetSpike = function(_) return nil end,
+        IsInSpikeWindow = function(_, _) return false end,
+        GetSpikeState = function(_, _) return "mid" end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 -- Per-match team mood (aggression / patience / coordination etc.) — adds
--- per-game variance on top of per-bot personality.
+-- per-game variance on top of per-bot personality. Now layered under
+-- J.DraftStrategy, which provides data-driven strategy from the actual draft.
 local okMood, TeamMoodModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_team_mood')
 if okMood and TeamMoodModule then
     J.TeamMood = TeamMoodModule
@@ -166,9 +188,14 @@ function J.DebugPeriodic()
     if okC and Customize and Customize.Debug == true then
         local now = DotaTime()
         -- Print mood once at start so user can see this match's flavor
-        if not _moodPrinted and now > 0 and J.TeamMood and J.TeamMood.Describe then
+        if not _moodPrinted and now > 0 then
             _moodPrinted = true
-            print('[OHA mood] ' .. J.TeamMood.Describe())
+            if J.DraftStrategy and J.DraftStrategy.Describe then
+                print('[OHA draft] ' .. J.DraftStrategy.Describe())
+            end
+            if J.TeamMood and J.TeamMood.Describe then
+                print('[OHA mood] ' .. J.TeamMood.Describe())
+            end
         end
         if now - _lastDebugPrint >= 30 and now > 0 then
             _lastDebugPrint = now

@@ -323,14 +323,31 @@ function ____exports.ModulateDesire(bot, desire, mode)
         end
     end
 
-    -- Per-match team mood — adds chaos so each game feels different.
-    -- Multiplies on top of everything else so the game-state-aware signals
-    -- still dominate, but the match flavor leaves a fingerprint.
+    -- Draft-analyzed strategy: grounded in the actual heroes on both teams.
+    -- Replaces the random team_mood dice roll. If draft data is available,
+    -- this is authoritative; if not, fall through to team_mood fallback.
     local J = getJmz()
-    if J ~= nil and J.TeamMood ~= nil then
-        local okMM, moodMult = pcall(function() return J.TeamMood.GetMoodMultiplier(mode) end)
-        if okMM and type(moodMult) == "number" then
-            desire = desire * moodMult
+    if J ~= nil and J.DraftStrategy ~= nil then
+        local okSV, sv = pcall(function() return J.DraftStrategy.GetStrategyValues() end)
+        if okSV and type(sv) == "table" then
+            local axisMult = 1.0
+            if mode == "farm" then
+                axisMult = sv.patience or 1.0
+            elseif mode == "roam" or mode == "team_roam" then
+                axisMult = (sv.aggression or 1.0) * (sv.gank_eagerness or 1.0)
+            elseif mode == "push" then
+                axisMult = sv.push_eagerness or 1.0
+            elseif mode == "defend" or mode == "retreat" then
+                axisMult = sv.defensive_lean or 1.0
+            elseif mode == "roshan" then
+                axisMult = sv.rosh_eagerness or 1.0
+            elseif mode == "assemble" then
+                axisMult = sv.coordination or 1.0
+            end
+            -- Clamp to documented envelope
+            if axisMult < 0.80 then axisMult = 0.80 end
+            if axisMult > 1.20 then axisMult = 1.20 end
+            desire = desire * axisMult
         end
     end
 
