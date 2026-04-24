@@ -323,10 +323,55 @@ function ____exports.ModulateDesire(bot, desire, mode)
         end
     end
 
+    -- Phase 5: farm pace awareness. If bot is below percentile-50 GPM for their
+    -- hero, boost farm desire. If ahead of pace (above p75), reduce farm slightly
+    -- so they participate more. Replaces guessed farm multipliers with real data.
+    if J ~= nil and J.DraftStrategy ~= nil and J.DraftStrategy.GetFarmPaceMultiplier ~= nil then
+        if mode == "farm" then
+            local ok, paceMult = pcall(function() return J.DraftStrategy.GetFarmPaceMultiplier(bot) end)
+            if ok and type(paceMult) == "number" then
+                desire = desire * paceMult
+            end
+        end
+    end
+
+    -- Phase 3: per-bot spike awareness. Check this bot's own hero's spike state.
+    -- Pre-spike: farm more, fight less (don't engage before online).
+    -- In-spike: press the window (push/roam boost).
+    -- Post-spike: macro-play (push/defend boost, less risky ganks).
+    local J = getJmz()
+    if J ~= nil and J.DraftStrategy ~= nil and J.DraftStrategy.GetSpikeState ~= nil then
+        local ok, name = pcall(function() return bot:GetUnitName() end)
+        if ok and type(name) == "string" then
+            local state = J.DraftStrategy.GetSpikeState(name, DotaTime())
+            local spikeMult = 1.0
+            if state == "pre" then
+                -- Pre-spike: farm heavy, avoid fights
+                if mode == "farm" then spikeMult = 1.10
+                elseif mode == "team_roam" or mode == "roam" then spikeMult = 0.90
+                elseif mode == "retreat" then spikeMult = 1.08
+                elseif mode == "push" then spikeMult = 0.90 end
+            elseif state == "in" then
+                -- In-spike: press the window
+                if mode == "team_roam" or mode == "roam" then spikeMult = 1.12
+                elseif mode == "push" then spikeMult = 1.10
+                elseif mode == "farm" then spikeMult = 0.90
+                elseif mode == "retreat" then spikeMult = 0.92 end
+            elseif state == "post" then
+                -- Post-spike: macro play
+                if mode == "push" then spikeMult = 1.08
+                elseif mode == "defend" then spikeMult = 1.05
+                elseif mode == "roam" then spikeMult = 0.95 end
+            end
+            if spikeMult < 0.85 then spikeMult = 0.85 end
+            if spikeMult > 1.15 then spikeMult = 1.15 end
+            desire = desire * spikeMult
+        end
+    end
+
     -- Draft-analyzed strategy: grounded in the actual heroes on both teams.
     -- Replaces the random team_mood dice roll. If draft data is available,
     -- this is authoritative; if not, fall through to team_mood fallback.
-    local J = getJmz()
     if J ~= nil and J.DraftStrategy ~= nil then
         local okSV, sv = pcall(function() return J.DraftStrategy.GetStrategyValues() end)
         if okSV and type(sv) == "table" then

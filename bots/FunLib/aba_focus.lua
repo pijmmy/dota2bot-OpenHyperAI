@@ -98,6 +98,9 @@ local function computeFocus()
     local bestScore = -1
     local bestResult = nil
 
+    -- Phase 3: spike awareness factor. Pull once.
+    local now = DotaTime()
+
     for i = 1, #enemyPlayers do
         local pid = enemyPlayers[i]
         if IsHeroAlive(pid) then
@@ -120,22 +123,41 @@ local function computeFocus()
                     local heroUnit = findVisibleEnemyHero(pid)
                     local hp = 1.0
                     local isCore = 0.5
+                    local heroName = nil
                     if heroUnit ~= nil then
                         hp = J.GetHP(heroUnit)
                         isCore = J.IsCore(heroUnit) and 1 or 0
+                        local okN, n = pcall(function() return heroUnit:GetUnitName() end)
+                        if okN then heroName = n end
                     end
                     local lowHP = 1.0 - hp
                     local reach = math.min(#ourNear, 3) / 3
 
-                    local score = 2.0 * isolated + 1.6 * lowHP + 0.6 * reach + 0.4 * isCore
+                    -- Phase 3: spike bonus. Killing a pre-spike enemy is valuable
+                    -- (prevent their power spike); killing an in-spike enemy
+                    -- interrupts their window. Post-spike enemy = lower priority,
+                    -- they've already done their damage.
+                    local spikeBonus = 0
+                    if heroName ~= nil and J.DraftStrategy and J.DraftStrategy.GetSpikeState then
+                        local state = J.DraftStrategy.GetSpikeState(heroName, now)
+                        if state == "pre" then spikeBonus = 0.4    -- kill before they spike
+                        elseif state == "in" then spikeBonus = 0.3 -- interrupt their window
+                        elseif state == "post" then spikeBonus = -0.1 end
+                    end
+
+                    local score = 2.0 * isolated + 1.6 * lowHP + 0.6 * reach + 0.4 * isCore + spikeBonus
 
                     if score > bestScore then
                         bestScore = score
+                        local reasonStr = describeReason(isolated, hp, #ourNear, isCore)
+                        if spikeBonus ~= 0 then
+                            reasonStr = reasonStr .. ",spike=" .. tostring(spikeBonus > 0 and "+" .. string.format("%.1f", spikeBonus) or string.format("%.1f", spikeBonus))
+                        end
                         bestResult = {
                             unit = heroUnit,
                             playerID = pid,
                             score = score,
-                            reason = describeReason(isolated, hp, #ourNear, isCore),
+                            reason = reasonStr,
                             validUntil = 0,
                             lastComputeTime = 0,
                         }

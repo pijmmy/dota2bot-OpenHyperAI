@@ -593,10 +593,19 @@ local function computePlan(bot)
     end
 
     -- 3. CONTEST_ROSH: rosh alive, past early game, numbers favorable.
-    -- Loosened from 15min/4-allies to 12min/3-allies; also fires when enemies
-    -- are mostly dead (post-teamfight push for rosh).
+    -- Phase 4: use pro_macro data for the time gate (was hardcoded 12*60).
+    -- Falls back to 12 min if no data loaded.
+    local roshGateSec = 12 * 60
+    local jmzM = jmz()
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.first_rosh_typical_sec and pm.first_rosh_typical_sec > 0 then
+            -- Pros contest first rosh around 15 min; use 80% of that as our "can start thinking about it" gate
+            roshGateSec = math.floor(pm.first_rosh_typical_sec * 0.8)
+        end
+    end
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
-    if okRosh and roshAlive and now > 12 * 60 then
+    if okRosh and roshAlive and now > roshGateSec then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
         if aliveAllies >= thresholds.roshAllyThreshold and aliveAllies >= aliveEnemies then
@@ -641,11 +650,18 @@ local function computePlan(bot)
         end
     end
 
-    -- 5.7 LATE_GAME_GROUP: after 25min, default to grouping rather than split
-    -- farming. Real teams don't split-farm late; the risk of a 5-man pick
-    -- or a lost high-ground defense is too high. User complaint: "late game
-    -- they are not defending higher ground, they should be grouping up."
-    if now > 25 * 60 then
+    -- 5.7 LATE_GAME_GROUP: after ~25min (data-tuned), default to grouping
+    -- rather than split farming. Phase 4: use match_duration_p25 as gate
+    -- — the bottom 25% of pro matches end by this time, which is roughly
+    -- when the late-game snowball starts. Falls back to 25 min hardcoded.
+    local lateGameGateSec = 25 * 60
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.match_duration_p25 and pm.match_duration_p25 > 0 then
+            lateGameGateSec = pm.match_duration_p25
+        end
+    end
+    if now > lateGameGateSec then
         local groupLoc = computeGroupLocation(team)
         if groupLoc ~= nil then
             return freshPlan("late_game_group", nil, groupLoc, "late game: group at high ground")

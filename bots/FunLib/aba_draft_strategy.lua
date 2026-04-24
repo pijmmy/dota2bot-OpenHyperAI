@@ -34,11 +34,15 @@ local _archetypesMod  = tryLoad(GetScriptDirectory().."/FunLib/data/draft_archet
 local _spikesMod      = tryLoad(GetScriptDirectory().."/FunLib/data/hero_spikes")
 local _statsMod       = tryLoad(GetScriptDirectory().."/FunLib/data/hero_stats")
 local _matchupsMod    = tryLoad(GetScriptDirectory().."/FunLib/data/hero_matchups")
+local _benchmarksMod  = tryLoad(GetScriptDirectory().."/FunLib/data/hero_benchmarks")
+local _proMacroMod    = tryLoad(GetScriptDirectory().."/FunLib/data/pro_macro")
 
 local ARCHETYPES = (_archetypesMod and _archetypesMod.HeroArchetypes) or {}
 local SPIKES     = (_spikesMod and _spikesMod.HeroSpikes) or {}
 local STATS      = (_statsMod and _statsMod.HeroStats) or {}
 local MATCHUPS   = (_matchupsMod and _matchupsMod.HeroMatchups) or {}
+local BENCHMARKS = (_benchmarksMod and _benchmarksMod.HeroBenchmarks) or {}
+local PRO_MACRO  = (_proMacroMod and _proMacroMod.ProMacro) or {}
 
 local function dataAvailable()
     local n = 0
@@ -187,14 +191,20 @@ local STRATEGIES = {
 -- ============================================================
 
 local function pickStrategy(archetypeTotals, tempoDist, avgCoreScaling)
-    -- Find the dominant archetype
+    -- Find the dominant archetype.
+    -- If ALL totals are 0 (e.g., every hero on the board is unknown to our
+    -- scraped data — new patch hero, scraper stale), don't pick a random one
+    -- from pairs()-order. Fall through to the default strategy.
     local top = nil
-    local topScore = -1
+    local topScore = 0   -- require > 0 to actually select; avoids non-deterministic pairs() winner on all-zero data
     for k, v in pairs(archetypeTotals) do
         if v > topScore then
             topScore = v
             top = k
         end
+    end
+    if top == nil then
+        return "teamfight_mid"  -- safe default
     end
 
     local earlyHeroes = tempoDist.early or 0
@@ -236,6 +246,51 @@ local function pickStrategy(archetypeTotals, tempoDist, avgCoreScaling)
 
     -- Default fallback
     return "teamfight_mid"
+end
+
+-- ============================================================
+-- Live game state adjustments (Phase 6)
+--
+-- Draft analysis runs once. But mid-game state shifts: falling behind
+-- on networth, losing towers, comebacks. Strategy should adapt.
+-- This re-runs every N seconds and may override the draft baseline.
+-- ============================================================
+
+local RECOMPUTE_INTERVAL = 90   -- every 90s (not so often that bots flip)
+local _lastLiveEval = -999
+local _liveStrategyOverride = nil   -- nil = use draft baseline
+
+local function computeLiveOverride()
+    local J = jmz()
+    if J == nil then return nil end
+
+    local okNW, myNW, enemyNW = pcall(function() return J.GetInventoryNetworth() end)
+    if not okNW or myNW == nil or enemyNW == nil then return nil end
+    local nwDelta = myNW - enemyNW
+
+    local now = DotaTime()
+
+    -- Massive gold lead mid-late game: switch to siege
+    if nwDelta >= 20000 and now > 15 * 60 then
+        return "fast_siege", "NW lead " .. tostring(math.floor(nwDelta / 1000)) .. "k"
+    end
+
+    -- Falling behind badly: turtle and scale
+    if nwDelta <= -15000 and now > 15 * 60 then
+        return "turtle_defensive", "NW behind " .. tostring(math.floor(-nwDelta / 1000)) .. "k"
+    end
+
+    -- Way behind early: play defensive
+    if nwDelta <= -8000 and now < 20 * 60 then
+        return "turtle_defensive", "early NW behind"
+    end
+
+    -- Late game and ~even: favor teamfight_mid for coordination
+    if now > 30 * 60 and math.abs(nwDelta) < 10000 then
+        return "late_scale", "late-game even"
+    end
+
+    return nil
 end
 
 -- ============================================================
@@ -330,9 +385,39 @@ end
 -- Returns the mood-style multipliers for the current strategy.
 -- Used by aba_personality ModulateDesire as a drop-in replacement for
 -- J.TeamMood.GetMoodMultiplier.
+--
+-- Now includes Phase-6 live override: if game state strongly signals
+-- a shift (20k NW lead -> siege, 15k behind -> turtle), use the override.
 function ____exports.GetStrategyValues()
     local a = analyzeDraft()
-    return (a and a.strategy_values) or STRATEGIES.teamfight_mid
+    local base = (a and a.strategy_values) or STRATEGIES.teamfight_mid
+
+    -- Refresh live override on interval
+    local now = DotaTime()
+    if now - _lastLiveEval >= RECOMPUTE_INTERVAL then
+        _lastLiveEval = now
+        local override, reason = computeLiveOverride()
+        if override ~= nil and STRATEGIES[override] ~= nil then
+            _liveStrategyOverride = { key = override, values = STRATEGIES[override], reason = reason }
+        else
+            _liveStrategyOverride = nil
+        end
+    end
+
+    if _liveStrategyOverride ~= nil then
+        return _liveStrategyOverride.values
+    end
+    return base
+end
+
+-- Current effective strategy key (draft OR live override)
+function ____exports.GetEffectiveStrategyName()
+    local _ = ____exports.GetStrategyValues()  -- refresh live override
+    if _liveStrategyOverride ~= nil then
+        return _liveStrategyOverride.key
+    end
+    local a = analyzeDraft()
+    return a and a.strategy or "teamfight_mid"
 end
 
 -- Read the enemy's strategy — lets team-plan anticipate enemy plays.
@@ -357,6 +442,50 @@ end
 
 function ____exports.GetSpike(heroName)
     return SPIKES[heroName]
+end
+
+-- Per-hero percentile benchmarks — { gpm_p50, gpm_p75, gpm_p95, xpm_p50, ... }
+function ____exports.GetBenchmark(heroName)
+    return BENCHMARKS[heroName]
+end
+
+-- Pro-match macro timings (first rosh time, first T1 fall, etc.)
+function ____exports.GetProMacro()
+    return PRO_MACRO
+end
+
+-- Phase 5: compare bot's current gold/min to its hero's percentile benchmarks.
+-- Returns a farm-pace multiplier:
+--   >1.0 = below p50 (farm harder)
+--   =1.0 = around p50
+--   <1.0 = at or above p75 (on track, don't over-farm)
+function ____exports.GetFarmPaceMultiplier(bot)
+    if bot == nil then return 1.0 end
+    local J = jmz()
+    if J == nil then return 1.0 end
+    local okN, heroName = pcall(function() return bot:GetUnitName() end)
+    if not okN or type(heroName) ~= "string" then return 1.0 end
+    local bm = BENCHMARKS[heroName]
+    if bm == nil or bm.gpm_p50 == nil then return 1.0 end
+
+    -- Bot's current GPM estimate. Dota API: bot:GetNetWorth() / GameTime_in_min
+    local okNW, nw = pcall(function() return bot:GetNetWorth() end)
+    if not okNW or nw == nil then return 1.0 end
+    local t = DotaTime()
+    if t < 60 then return 1.0 end  -- too early to compare
+    local currentGPM = nw * 60 / t
+
+    local p50 = bm.gpm_p50 or 400
+    local p75 = bm.gpm_p75 or (p50 * 1.15)
+
+    if currentGPM < p50 * 0.85 then
+        return 1.12   -- way below — farm harder
+    elseif currentGPM < p50 then
+        return 1.06   -- slightly below
+    elseif currentGPM > p75 then
+        return 0.94   -- ahead of pace — can commit more
+    end
+    return 1.0
 end
 
 -- Returns true if the given game time is within this hero's spike window.
@@ -387,9 +516,17 @@ function ____exports.Describe()
     local a = analyzeDraft()
     if a == nil then return "not analyzed yet" end
     if not a.data_loaded then return "no data loaded — using fallback " .. a.strategy end
-    local parts = { a.strategy }
+    local parts = {}
+    -- Indicate live override if active
+    if _liveStrategyOverride ~= nil then
+        table.insert(parts, _liveStrategyOverride.key .. " [live:" .. (_liveStrategyOverride.reason or "?") .. "]")
+    else
+        table.insert(parts, a.strategy)
+    end
     if a.enemy_strategy then table.insert(parts, "vs " .. a.enemy_strategy) end
-    if a.reason then table.insert(parts, "(" .. a.reason .. ")") end
+    if a.reason and _liveStrategyOverride == nil then
+        table.insert(parts, "(" .. a.reason .. ")")
+    end
     local tempo = a.my_tempo or {}
     local et = a.enemy_tempo or {}
     local tempoStr = string.format("my=%dE/%dM/%dL enemy=%dE/%dM/%dL",

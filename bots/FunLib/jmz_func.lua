@@ -178,34 +178,82 @@ else
     }
 end
 
--- Periodic debug summary — prints team plan / focus / game theory / mood state
--- every 30s so the user can see what the systems are doing during play.
--- Controlled by Customize.Debug; defaults off to avoid spam.
+-- Periodic debug summary + transition log.
+--
+-- Periodic: prints team plan / focus / game theory / mood state every 30s.
+-- Transition: prints when intent or focus changes between ticks (immediate).
+-- Event: modules can call J.Log.Event(tag, text) for one-shot notable events.
+--
+-- All gated by Customize.Debug. Output goes to console; if user has
+-- `con_logfile console.log` set, everything ends up in a file I can read.
 local _lastDebugPrint = -999
 local _moodPrinted = false
-function J.DebugPeriodic()
+local _lastIntent = nil
+local _lastFocusName = nil
+
+local function debugEnabled()
     local okC, Customize = pcall(require, GetScriptDirectory()..'/Customize/general')
-    if okC and Customize and Customize.Debug == true then
-        local now = DotaTime()
-        -- Print mood once at start so user can see this match's flavor
-        if not _moodPrinted and now > 0 then
-            _moodPrinted = true
-            if J.DraftStrategy and J.DraftStrategy.Describe then
-                print('[OHA draft] ' .. J.DraftStrategy.Describe())
-            end
-            if J.TeamMood and J.TeamMood.Describe then
-                print('[OHA mood] ' .. J.TeamMood.Describe())
-            end
+    return okC and Customize and Customize.Debug == true
+end
+
+function J.DebugPeriodic()
+    if not debugEnabled() then return end
+    local now = DotaTime()
+
+    -- Print match flavor once
+    if not _moodPrinted and now > 0 then
+        _moodPrinted = true
+        if J.DraftStrategy and J.DraftStrategy.Describe then
+            print('[OHA draft] ' .. J.DraftStrategy.Describe())
         end
-        if now - _lastDebugPrint >= 30 and now > 0 then
-            _lastDebugPrint = now
-            local plan = 'plan: ' .. (J.TeamPlan.Describe and J.TeamPlan.Describe() or '?')
-            local focus = 'focus: ' .. (J.Focus.Describe and J.Focus.Describe() or '?')
-            local enemyF = 'enemy_focus: ' .. (J.EnemyFocus and J.EnemyFocus.Describe and J.EnemyFocus.Describe() or '?')
-            local gt = 'gt: ' .. (J.GameTheory.Describe and J.GameTheory.Describe() or '?')
-            print(string.format('[OHA t=%.0fs] %s | %s | %s | %s', now, plan, focus, enemyF, gt))
+        if J.TeamMood and J.TeamMood.Describe then
+            print('[OHA mood] ' .. J.TeamMood.Describe())
         end
     end
+
+    -- Transition: intent change — print immediately (not waiting 30s)
+    if J.TeamPlan and J.TeamPlan.GetCurrentPlan then
+        local plan = J.TeamPlan.GetCurrentPlan()
+        if plan ~= nil and plan.intent ~= _lastIntent then
+            local desc = plan.intent
+            if plan.reason and plan.reason ~= "" then desc = desc .. " [" .. plan.reason .. "]" end
+            print(string.format('[OHA t=%.0fs] intent: %s -> %s', now, tostring(_lastIntent or "nil"), desc))
+            _lastIntent = plan.intent
+        end
+    end
+
+    -- Transition: focus change
+    if J.Focus and J.Focus.GetFocus then
+        local f = J.Focus.GetFocus()
+        local name = nil
+        if f ~= nil and f.unit ~= nil and DotaTime() < (f.validUntil or 0) then
+            local ok, n = pcall(function() return f.unit:GetUnitName() end)
+            if ok then name = n end
+        end
+        if name ~= _lastFocusName then
+            print(string.format('[OHA t=%.0fs] focus: %s -> %s', now, tostring(_lastFocusName or "none"), tostring(name or "none")))
+            _lastFocusName = name
+        end
+    end
+
+    -- Periodic summary every 30s
+    if now - _lastDebugPrint >= 30 and now > 0 then
+        _lastDebugPrint = now
+        local plan = 'plan: ' .. (J.TeamPlan.Describe and J.TeamPlan.Describe() or '?')
+        local focus = 'focus: ' .. (J.Focus.Describe and J.Focus.Describe() or '?')
+        local enemyF = 'enemy_focus: ' .. (J.EnemyFocus and J.EnemyFocus.Describe and J.EnemyFocus.Describe() or '?')
+        local gt = 'gt: ' .. (J.GameTheory.Describe and J.GameTheory.Describe() or '?')
+        local strat = 'strat: ' .. (J.DraftStrategy and J.DraftStrategy.GetEffectiveStrategyName and J.DraftStrategy.GetEffectiveStrategyName() or '?')
+        print(string.format('[OHA t=%.0fs] %s | %s | %s | %s | %s', now, strat, plan, focus, enemyF, gt))
+    end
+end
+
+-- Event logger — call from any module for significant events.
+-- Usage: J.Log.Event("save", "Dazzle grave on Medusa")
+J.Log = {}
+function J.Log.Event(tag, text)
+    if not debugEnabled() then return end
+    print(string.format('[OHA event t=%.0fs] %s: %s', DotaTime(), tostring(tag), tostring(text)))
 end
 
 -- Team plan layer. Same pcall fallback pattern.
