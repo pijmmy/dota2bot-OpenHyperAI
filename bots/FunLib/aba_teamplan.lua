@@ -391,6 +391,15 @@ end
 local _intentStartTime = {}    -- intent -> when it became active
 local _intentCooldownUntil = {}  -- intent -> game time it can fire again
 
+-- Phase 8: smoke_gank cadence. Pro matches average one smoke ~every 3 min
+-- (pro_macro.smoke_gank_cadence_min). We rate-limit our own smoke_gank plan
+-- issuance to roughly match so bots don't spam gank intent.
+local _lastSmokeGankTime = -999
+
+-- Phase 4: push_lane min-time gate. Bots shouldn't try to push during laning
+-- phase. Derived from pro first_t1_fall_typical_sec * 0.6 at compute time.
+local _lastPushLaneTime = -999
+
 local TACTIC_TIMEOUT = {
     commit_kill = 22,        -- give up after 22s if no kill
     contest_rosh = 35,       -- 35s for rosh attempt
@@ -627,16 +636,52 @@ local function computePlan(bot)
         return freshPlan("contest_lotus", nil, lotusLoc, "lotus sustain pickup")
     end
 
-    -- 4. PUSH_LANE: weakest enemy lane + we have people (threshold adapts to pressure)
-    local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
-    if pushTarget ~= nil then
-        return freshPlan("push_lane", pushTarget.lane, pushTarget.loc, "push weakest lane")
+    -- 4. PUSH_LANE: weakest enemy lane + we have people (threshold adapts to pressure).
+    -- Phase 4: gate by a min game time from pro macro data. Pro first T1 typically
+    -- falls around 12 min; we allow push_lane from 60% of that window so bots still
+    -- leverage early lane wins (~7 min) but don't try to siege during laning stage.
+    -- Exception: if we have a clear networth lead, allow earlier pushes.
+    local pushMinSec = 7 * 60
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.first_t1_fall_typical_sec and pm.first_t1_fall_typical_sec > 0 then
+            pushMinSec = pm.first_t1_fall_typical_sec * 0.6
+        end
+    end
+    -- Big gold lead (>4k) overrides the min-time gate — comp that snowballs early
+    -- should be allowed to press advantage.
+    local nwLead = 0
+    if jmzM and jmzM.GetInventoryNetworth then
+        local okNW, myNW, enemyNW = pcall(function() return jmzM.GetInventoryNetworth() end)
+        if okNW and type(myNW) == "number" and type(enemyNW) == "number" then
+            nwLead = myNW - enemyNW
+        end
+    end
+    if now >= pushMinSec or nwLead >= 4000 then
+        local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
+        if pushTarget ~= nil then
+            _lastPushLaneTime = now
+            return freshPlan("push_lane", pushTarget.lane, pushTarget.loc, "push weakest lane")
+        end
     end
 
-    -- 5. SMOKE_GANK: mid/late game + grouped
-    if now > 10 * 60 then
+    -- 5. SMOKE_GANK: mid/late game + grouped.
+    -- Phase 8: enforce pro-average cadence between smoke ganks
+    -- (pro_macro.smoke_gank_cadence_min * 60 sec, default 180s). Without a gate,
+    -- smoke_gank intent would re-issue every recompute tick while 3+ bots stand
+    -- together — this rate-limits the *plan issuance* so the team disperses
+    -- between ganks and actually farms.
+    local smokeCadenceSec = 180
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.smoke_gank_cadence_min and pm.smoke_gank_cadence_min > 0 then
+            smokeCadenceSec = pm.smoke_gank_cadence_min * 60
+        end
+    end
+    if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec then
         local grouped = countGroupedAllies(team)
         if grouped >= 3 then
+            _lastSmokeGankTime = now
             return freshPlan("smoke_gank", nil, nil, "grouped, look for picks")
         end
     end

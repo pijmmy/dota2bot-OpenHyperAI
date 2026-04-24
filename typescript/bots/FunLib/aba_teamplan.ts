@@ -74,6 +74,13 @@ let currentPlan: TeamPlan = {
     reason: "initial",
 };
 
+// Phase 8: smoke_gank cadence. Pro matches average one smoke every ~3 min
+// (pro_macro.smoke_gank_cadence_min). Rate-limit plan issuance to match.
+let _lastSmokeGankTime = -999;
+
+// Phase 4: push_lane min-time gate. Exposed for potential debug inspection.
+let _lastPushLaneTime = -999;
+
 // ============================================================
 // Public API
 // ============================================================
@@ -169,16 +176,43 @@ function computePlan(bot: Unit): TeamPlan {
         }
     }
 
-    // 4. PUSH_LANE: weakest enemy lane + we have 4+ allies grouped somewhere
-    const pushTarget = findPushTarget(enemyTeam, team);
-    if (pushTarget !== null) {
-        return freshPlan("push_lane", pushTarget.lane, pushTarget.loc, "push weakest lane");
+    // 4. PUSH_LANE: weakest enemy lane + we have 4+ allies grouped somewhere.
+    // Phase 4: gate by min game time derived from pro macro first_t1_fall_typical_sec.
+    // Bots shouldn't siege during laning stage; allow from ~60% of pro first-T1 timing
+    // (~7 min) or earlier if we have a >4k NW lead.
+    let pushMinSec = 7 * 60;
+    const pm4 = (jmz as any).DraftStrategy?.GetProMacro?.();
+    if (pm4 && pm4.first_t1_fall_typical_sec && pm4.first_t1_fall_typical_sec > 0) {
+        pushMinSec = pm4.first_t1_fall_typical_sec * 0.6;
+    }
+    let nwLead = 0;
+    try {
+        const nw = (jmz as any).GetInventoryNetworth?.();
+        if (nw && typeof nw[0] === "number" && typeof nw[1] === "number") {
+            nwLead = nw[0] - nw[1];
+        }
+    } catch (_e) { /* ignore */ }
+    if (now >= pushMinSec || nwLead >= 4000) {
+        const pushTarget = findPushTarget(enemyTeam, team);
+        if (pushTarget !== null) {
+            _lastPushLaneTime = now;
+            return freshPlan("push_lane", pushTarget.lane, pushTarget.loc, "push weakest lane");
+        }
     }
 
-    // 5. SMOKE_GANK: mid/late game + 3+ allies grouped + no lane under siege
-    if (now > 10 * 60) {
+    // 5. SMOKE_GANK: mid/late game + 3+ allies grouped + no lane under siege.
+    // Phase 8: enforce pro-average cadence between smoke ganks (default 3 min).
+    // Without a gate the plan re-issues every recompute while allies stand together;
+    // this rate-limits issuance so the team disperses between ganks.
+    let smokeCadenceSec = 180;
+    const pm8 = (jmz as any).DraftStrategy?.GetProMacro?.();
+    if (pm8 && pm8.smoke_gank_cadence_min && pm8.smoke_gank_cadence_min > 0) {
+        smokeCadenceSec = pm8.smoke_gank_cadence_min * 60;
+    }
+    if (now > 10 * 60 && (now - _lastSmokeGankTime) >= smokeCadenceSec) {
         const groupedCount = countGroupedAllies(team);
         if (groupedCount >= 3) {
+            _lastSmokeGankTime = now;
             return freshPlan("smoke_gank", undefined, undefined, "grouped, look for picks");
         }
     }
