@@ -267,6 +267,19 @@ function X.ConsiderMeatHook(MeatHook, Rot, Dismember, botTarget, botHP, nEnemyHe
 	local nDamage = MeatHook:GetSpecialValueInt('damage')
 	local nManaCost = MeatHook:GetManaCost()
 
+    -- Focus integration: if team has a high-quality focus target visible
+    -- + nothing is between us and them, hook the focus. Pro Pudge picks
+    -- the team's call target every time, not just whoever's in range.
+    if J.Focus ~= nil and J.Focus.GetFocusIfInRange ~= nil then
+        local focusTarget = J.Focus.GetFocusIfInRange(bot, nCastRange)
+        if focusTarget ~= nil and J.IsValidHero(focusTarget)
+           and not J.IsSuspiciousIllusion(focusTarget)
+           and not focusTarget:IsMagicImmune()
+           and not J.IsUnitBetweenMeAndLocation(bot, focusTarget, focusTarget:GetLocation(), nRadius) then
+            return BOT_ACTION_DESIRE_HIGH, focusTarget:GetLocation()
+        end
+    end
+
     local nEnemyHeroes = J.GetNearbyHeroes(bot,nCastRange, true, BOT_MODE_NONE)
     for _, enemyHero in pairs(nEnemyHeroes)
     do

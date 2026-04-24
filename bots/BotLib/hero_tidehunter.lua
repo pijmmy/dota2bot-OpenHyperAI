@@ -727,17 +727,40 @@ function X.ConsiderR()
 	local nInBonusEnemyList = J.GetAroundEnemyHeroList( nCastRange - 260 )
 	local hCastTarget = nil
 	local sCastMotive = nil
-	
-	
+
+	-- Save_ally counter-init: if enemy is committing on one of our allies and
+	-- we have multiple enemies in Ravage range, fire the ult to interrupt
+	-- their commit. Tide Ravage is THE classic counter-initiation tool.
+	if J.EnemyFocus ~= nil and J.EnemyFocus.IsActive and J.EnemyFocus.IsActive()
+	   and #nInRangeEnemyList >= 2 then
+		hCastTarget = bot
+		sCastMotive = 'R-counter-init enemy commit'
+		return BOT_ACTION_DESIRE_HIGH, sCastMotive
+	end
+
+	-- Commit_kill: if team is committing on a focus and they're in Ravage
+	-- range with at least 1 other enemy near (multi-target value), fire.
+	if J.TeamPlan ~= nil and J.TeamPlan.GetCurrentPlan ~= nil then
+		local plan = J.TeamPlan.GetCurrentPlan()
+		if plan ~= nil and plan.intent == 'commit_kill'
+		   and plan.validUntil ~= nil and DotaTime() < plan.validUntil
+		   and #nInRangeEnemyList >= 2 then
+			hCastTarget = bot
+			sCastMotive = 'R-commit_kill multi-target'
+			return BOT_ACTION_DESIRE_HIGH, sCastMotive
+		end
+	end
+
+
 	--打断敌人施法
 	for _, npcEnemy in pairs( nInRangeEnemyList )
-	do 
+	do
 		if npcEnemy:IsChanneling()
 			and not npcEnemy:IsMagicImmune()
 		then
 			hCastTarget = npcEnemy
 			sCastMotive = 'R-打断'..J.Chat.GetNormName( hCastTarget )
-			return BOT_ACTION_DESIRE_HIGH, sCastMotive		
+			return BOT_ACTION_DESIRE_HIGH, sCastMotive
 		end
 	end
 	

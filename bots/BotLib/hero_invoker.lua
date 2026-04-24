@@ -1492,6 +1492,25 @@ function X.ConsiderSunstrike()
     local nCastPoint = 0 -- Sunstrike:GetCastPoint()
     local nDamage = Sunstrike:GetSpecialValueInt('damage')
 
+    -- Focus integration: if team focus exists + low HP + global ability,
+    -- finish them with Sunstrike. Pro Invokers spam-snipe focus targets.
+    if J.Focus ~= nil and J.Focus.GetFocus ~= nil then
+        local focus = J.Focus.GetFocus()
+        if focus ~= nil and focus.unit ~= nil and DotaTime() < (focus.validUntil or 0) then
+            local target = focus.unit
+            if J.IsValidHero(target) and not J.IsSuspiciousIllusion(target)
+               and not target:HasModifier('modifier_abaddon_borrowed_time')
+               and not target:HasModifier('modifier_dazzle_shallow_grave')
+               and not target:HasModifier('modifier_oracle_false_promise_timer')
+               and not target:HasModifier('modifier_item_aeon_disk_buff') then
+                local hp = target:GetHealth()
+                if nDamage * 1.1 > hp then
+                    return BOT_ACTION_DESIRE_HIGH, target:GetLocation()
+                end
+            end
+        end
+    end
+
     local nAllEnemyHeroes = GetUnitList(UNIT_LIST_ENEMY_HEROES)
     for _, enemyHero in pairs(nAllEnemyHeroes)
     do
