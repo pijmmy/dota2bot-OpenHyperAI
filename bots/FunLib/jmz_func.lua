@@ -106,6 +106,22 @@ else
     }
 end
 
+-- Per-match team mood (aggression / patience / coordination etc.) — adds
+-- per-game variance on top of per-bot personality.
+local okMood, TeamMoodModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_team_mood')
+if okMood and TeamMoodModule then
+    J.TeamMood = TeamMoodModule
+else
+    print('[WARN] aba_team_mood not loaded: '..tostring(TeamMoodModule))
+    J.TeamMood = {
+        Get = function() return { aggression=1, patience=1, coordination=1, rosh_eagerness=1, gank_eagerness=1, push_eagerness=1, defensive_lean=1, tempo='mid', theme='stub' } end,
+        GetMoodMultiplier = function(_) return 1.0 end,
+        GetCoordinationMultiplier = function() return 1.0 end,
+        GetThresholdAdjust = function() return { commit=0, push=0, rosh=0 } end,
+        Describe = function() return 'stub' end,
+    }
+end
+
 -- Game theory (networth pressure, ult readiness, adaptive thresholds).
 local okGT, GameTheoryModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_gametheory')
 if okGT and GameTheoryModule then
@@ -121,20 +137,27 @@ else
     }
 end
 
--- Periodic debug summary — prints team plan / focus / game theory state every
--- 30s so the user can see what the systems are doing during play. Controlled
--- by Customize.Debug if set; defaults off to avoid spam in non-dev runs.
+-- Periodic debug summary — prints team plan / focus / game theory / mood state
+-- every 30s so the user can see what the systems are doing during play.
+-- Controlled by Customize.Debug; defaults off to avoid spam.
 local _lastDebugPrint = -999
+local _moodPrinted = false
 function J.DebugPeriodic()
     local okC, Customize = pcall(require, GetScriptDirectory()..'/Customize/general')
     if okC and Customize and Customize.Debug == true then
         local now = DotaTime()
+        -- Print mood once at start so user can see this match's flavor
+        if not _moodPrinted and now > 0 and J.TeamMood and J.TeamMood.Describe then
+            _moodPrinted = true
+            print('[OHA mood] ' .. J.TeamMood.Describe())
+        end
         if now - _lastDebugPrint >= 30 and now > 0 then
             _lastDebugPrint = now
             local plan = 'plan: ' .. (J.TeamPlan.Describe and J.TeamPlan.Describe() or '?')
             local focus = 'focus: ' .. (J.Focus.Describe and J.Focus.Describe() or '?')
+            local enemyF = 'enemy_focus: ' .. (J.EnemyFocus and J.EnemyFocus.Describe and J.EnemyFocus.Describe() or '?')
             local gt = 'gt: ' .. (J.GameTheory.Describe and J.GameTheory.Describe() or '?')
-            print(string.format('[OHA t=%.0fs] %s | %s | %s', now, plan, focus, gt))
+            print(string.format('[OHA t=%.0fs] %s | %s | %s | %s', now, plan, focus, enemyF, gt))
         end
     end
 end

@@ -322,6 +322,17 @@ function ____exports.ModulateDesire(bot, desire, mode)
         end
     end
 
+    -- Per-match team mood — adds chaos so each game feels different.
+    -- Multiplies on top of everything else so the game-state-aware signals
+    -- still dominate, but the match flavor leaves a fingerprint.
+    local J = getJmz()
+    if J ~= nil and J.TeamMood ~= nil then
+        local okMM, moodMult = pcall(function() return J.TeamMood.GetMoodMultiplier(mode) end)
+        if okMM and type(moodMult) == "number" then
+            desire = desire * moodMult
+        end
+    end
+
     return desire
 end
 
