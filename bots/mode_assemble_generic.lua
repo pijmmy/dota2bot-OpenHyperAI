@@ -93,6 +93,62 @@ function OnEnd()
 	assembleExpireTime = 0
 end
 
+-- TP-to-save: when bot is far from assembly point and has a TP scroll
+-- ready, TP to the nearest friendly tower close to the assembly point
+-- instead of walking. Especially impactful for save_ally / late_game_group
+-- where speed matters most.
+local TP_DISTANCE_THRESHOLD = 4500
+local TP_NEAR_TOWER_RADIUS = 2200
+local lastTPAttempt = -999
+local TP_COOLDOWN_BETWEEN_ATTEMPTS = 8  -- avoid spamming
+
+local function findFriendlyTowerNearLoc(loc, radius)
+	local team = GetTeam()
+	local towers = {
+		TOWER_TOP_1, TOWER_TOP_2, TOWER_TOP_3,
+		TOWER_MID_1, TOWER_MID_2, TOWER_MID_3,
+		TOWER_BOT_1, TOWER_BOT_2, TOWER_BOT_3,
+		TOWER_BASE_1, TOWER_BASE_2,
+	}
+	for _, t in ipairs(towers) do
+		local tower = GetTower(team, t)
+		if tower ~= nil and tower:IsAlive() then
+			local d = GetUnitToLocationDistance(tower, loc)
+			if d <= radius then return tower end
+		end
+	end
+	return nil
+end
+
+local function tryTPToAssembly(bot, assembleLoc)
+	if DotaTime() - lastTPAttempt < TP_COOLDOWN_BETWEEN_ATTEMPTS then return false end
+	if J.CanNotUseAbility(bot) then return false end
+	-- Don't TP if enemies near (gets cancelled / interrupted)
+	local nearbyEnemies = bot:GetNearbyHeroes(900, true, BOT_MODE_NONE)
+	if nearbyEnemies ~= nil and #nearbyEnemies > 0 then return false end
+	-- Don't TP if recently damaged
+	if bot:WasRecentlyDamagedByAnyHero(2.5) then return false end
+
+	local tpScroll = nil
+	for slot = 0, 16 do
+		local item = bot:GetItemInSlot(slot)
+		if item ~= nil and not item:IsNull() and item:GetName() == 'item_tpscroll'
+		   and item:IsFullyCastable() then
+			tpScroll = item
+			break
+		end
+	end
+	if tpScroll == nil then return false end
+
+	local destTower = findFriendlyTowerNearLoc(assembleLoc, TP_NEAR_TOWER_RADIUS)
+	if destTower == nil then return false end
+
+	local dest = destTower:GetLocation()
+	bot:Action_UseAbilityOnLocation(tpScroll, dest)
+	lastTPAttempt = DotaTime()
+	return true
+end
+
 function Think()
 	if J.CanNotUseAction(bot) then return end
 	if assembleLoc == nil then return end
@@ -101,6 +157,11 @@ function Think()
 	if dist <= ARRIVE_RADIUS then
 		assembleLoc = nil
 		return
+	end
+
+	-- TP if far enough that walking would take too long
+	if dist > TP_DISTANCE_THRESHOLD then
+		if tryTPToAssembly(bot, assembleLoc) then return end
 	end
 
 	bot:Action_MoveToLocation(assembleLoc)
