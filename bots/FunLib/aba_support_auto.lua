@@ -152,24 +152,52 @@ function ____exports.IsPullerRole(bot)
     return pos == 5 or pos == 4
 end
 
--- Don't stack/pull if engaged in a fight or running for life.
+-- Don't stack/pull if engaged in a fight, running for life, or doing
+-- something more important than camp detours.
+--
+-- Tightened after user feedback "patch is much worse" — original gates
+-- let supports abandon laning carries to stack, reducing carry farm.
 function ____exports.IsBusy(bot)
     if bot == nil then return true end
     if not bot:IsAlive() then return true end
     local J = jmz()
     if J == nil then return false end
     local hp = J.GetHP(bot)
-    if hp ~= nil and hp < 0.5 then return true end
-    if bot:WasRecentlyDamagedByAnyHero(3) then return true end
-    local enemies = J.GetNearbyHeroes(bot, 1100, true, BOT_MODE_NONE)
-    if enemies ~= nil and #enemies > 0 then return true end
-    -- Also bail if team plan is anything urgent
+    if hp ~= nil and hp < 0.6 then return true end                 -- was 0.5 — be more conservative
+    if bot:WasRecentlyDamagedByAnyHero(4) then return true end     -- was 3
+    local enemies = J.GetNearbyHeroes(bot, 1300, true, BOT_MODE_NONE)
+    if enemies ~= nil and #enemies > 0 then return true end        -- was 1100
+
+    -- DON'T abandon a laning carry to stack. If pos 5 with carry nearby,
+    -- stay in lane and protect.
+    local pos = J.GetPosition and J.GetPosition(bot) or 5
+    if pos == 5 then
+        -- Check if our carry (pos 1) is in our lane and within 1800u
+        local laneAllies = J.GetNearbyHeroes(bot, 1800, false, BOT_MODE_NONE)
+        if laneAllies ~= nil then
+            for i = 1, #laneAllies do
+                local ally = laneAllies[i]
+                if J.IsValidHero(ally) and ally ~= bot then
+                    local allyPos = J.GetPosition(ally)
+                    if allyPos == 1 then
+                        -- Don't ditch the carry during laning
+                        if J.IsInLaningPhase and J.IsInLaningPhase() then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     if J.TeamPlan ~= nil and J.TeamPlan.GetCurrentPlan ~= nil then
         local plan = J.TeamPlan.GetCurrentPlan()
         if plan ~= nil then
             local urgent = {
                 defend_base=true, defend_lane=true, save_ally=true,
                 commit_kill=true, lane_gank=true,
+                contest_rosh=true, contest_tormentor=true,
+                late_game_group=true,
             }
             if urgent[plan.intent] then return true end
         end

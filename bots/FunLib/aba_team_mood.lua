@@ -32,14 +32,17 @@ local function rollMood()
     -- team flavors (e.g. high aggression + low patience + early tempo
     -- = "early-game gank squad"; low aggression + high patience + late tempo
     -- = "late-game scaling carry team").
+    -- Magnitudes deliberately moderate — user feedback "patch is much worse"
+    -- after I bumped them too high. Target: each axis swings ~15% above/below
+    -- baseline. Combined stack stays well within the ModulateDesire envelope.
     local m = {
-        aggression     = clamp(0.75 + RandomFloat(0, 0.55), 0.75, 1.30),
-        patience       = clamp(0.75 + RandomFloat(0, 0.55), 0.75, 1.30),
-        coordination   = clamp(0.80 + RandomFloat(0, 0.45), 0.80, 1.25),
-        rosh_eagerness = clamp(0.65 + RandomFloat(0, 0.65), 0.65, 1.30),
-        gank_eagerness = clamp(0.70 + RandomFloat(0, 0.60), 0.70, 1.30),
-        push_eagerness = clamp(0.75 + RandomFloat(0, 0.55), 0.75, 1.30),
-        defensive_lean = clamp(0.80 + RandomFloat(0, 0.40), 0.80, 1.20),  -- multiplies retreat / defend
+        aggression     = clamp(0.85 + RandomFloat(0, 0.30), 0.85, 1.15),
+        patience       = clamp(0.85 + RandomFloat(0, 0.30), 0.85, 1.15),
+        coordination   = clamp(0.90 + RandomFloat(0, 0.20), 0.90, 1.10),
+        rosh_eagerness = clamp(0.80 + RandomFloat(0, 0.40), 0.80, 1.20),
+        gank_eagerness = clamp(0.85 + RandomFloat(0, 0.30), 0.85, 1.15),
+        push_eagerness = clamp(0.85 + RandomFloat(0, 0.30), 0.85, 1.15),
+        defensive_lean = clamp(0.90 + RandomFloat(0, 0.20), 0.90, 1.10),
     }
 
     -- Tempo: weighted random
@@ -101,10 +104,11 @@ function ____exports.GetMoodMultiplier(mode)
         if m.tempo == "early" then result = 0.9
         elseif m.tempo == "late" then result = 1.1 end
     end
-    -- Clamp to keep stack bounded (audit caught roam/team_roam reaching 1.69x
-    -- via aggression*gank_eagerness — outside the stated 0.7-1.4x envelope).
-    if result < 0.65 then result = 0.65 end
-    if result > 1.40 then result = 1.40 end
+    -- Tightened envelope after user feedback. Mood is supposed to be a
+    -- gentle nudge, not a strong signal — game state and personality
+    -- should dominate.
+    if result < 0.80 then result = 0.80 end
+    if result > 1.20 then result = 1.20 end
     return result
 end
 

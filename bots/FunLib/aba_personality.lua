@@ -249,12 +249,13 @@ end
 -- Applied on top of personality greed to produce sensibly wide gaps.
 -- Pos 1 and 2 cores farm harder; pos 4 and 5 supports farm much less
 -- (frees them for roam / ward / stack).
+-- Bumped after user feedback "carries should get more farm".
 local FARM_ROLE_SCALE = {
-    [1] = 1.20,
-    [2] = 1.10,
-    [3] = 0.85,
-    [4] = 0.50,
-    [5] = 0.45,
+    [1] = 1.35,    -- was 1.20
+    [2] = 1.20,    -- was 1.10
+    [3] = 0.90,    -- was 0.85
+    [4] = 0.45,    -- was 0.50
+    [5] = 0.40,    -- was 0.45
 }
 
 -- Push/team_roam can also be slightly role-weighted: supports lead initiations,

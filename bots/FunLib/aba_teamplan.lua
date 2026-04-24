@@ -334,10 +334,78 @@ local function countMissingEnemies(enemyTeam, staleSeconds)
 end
 
 -- ============================================================
+-- Tactic exhaustion / cooldown — give up failed commits
+--
+-- User feedback: "they should try once and move to the other spot or
+-- give up and switch tactics." If commit_kill or contest_rosh has been
+-- the intent continuously for too long, force a cooldown so other
+-- intents can fire and bots can try something else.
+-- ============================================================
+
+local _intentStartTime = {}    -- intent -> when it became active
+local _intentCooldownUntil = {}  -- intent -> game time it can fire again
+
+local TACTIC_TIMEOUT = {
+    commit_kill = 22,        -- give up after 22s if no kill
+    contest_rosh = 35,       -- 35s for rosh attempt
+    contest_tormentor = 30,
+    lane_gank = 18,
+    save_ally = 12,          -- saves are short-window
+}
+
+local TACTIC_COOLDOWN = {
+    commit_kill = 12,        -- 12s cooldown after timeout
+    contest_rosh = 25,       -- longer rest before re-attempting rosh
+    contest_tormentor = 20,
+    lane_gank = 8,
+    save_ally = 6,
+}
+
+local function isInCooldown(intent)
+    local until_t = _intentCooldownUntil[intent]
+    if until_t == nil then return false end
+    return DotaTime() < until_t
+end
+
+local function trackIntent(intent)
+    -- Called every computePlan with the intent that's about to be returned
+    local prev = nil
+    for k, _ in pairs(_intentStartTime) do prev = k; break end
+    if prev ~= intent then
+        _intentStartTime = {}
+        _intentStartTime[intent] = DotaTime()
+    end
+
+    -- If this intent has run too long, push it into cooldown
+    local startedAt = _intentStartTime[intent]
+    local timeout = TACTIC_TIMEOUT[intent]
+    if startedAt ~= nil and timeout ~= nil and (DotaTime() - startedAt) > timeout then
+        local cooldown = TACTIC_COOLDOWN[intent] or 10
+        _intentCooldownUntil[intent] = DotaTime() + cooldown
+        _intentStartTime = {}
+    end
+end
+
+-- ============================================================
 -- Intent computation
 -- ============================================================
 
 local function freshPlan(intent, lane, loc, reason)
+    -- Tactic switching: if this intent has been firing too long without success,
+    -- downgrade to regroup so bots break off and try something different.
+    -- Real Dota: failed dive -> regroup -> different tactic. Don't keep grinding.
+    if isInCooldown(intent) then
+        return {
+            intent = "regroup",
+            lane = nil,
+            location = nil,
+            validUntil = 0,
+            lastComputeTime = 0,
+            authorID = -1,
+            reason = "tactic '" .. tostring(intent) .. "' on cooldown — regrouping to switch",
+        }
+    end
+    trackIntent(intent)
     return {
         intent = intent,
         lane = lane,

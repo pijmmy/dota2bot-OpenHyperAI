@@ -6149,14 +6149,54 @@ function J.IsHumanInLoc(vLoc, nRadius)
 	return false
 end
 
+-- Cache the last-known Roshan location. Updated whenever we see Rosh in
+-- the unit list. This is more accurate than the time-of-day heuristic
+-- because Roshan alternates pits per spawn (independent of day/night).
+local _lastSeenRoshanLoc = nil
+local _lastSeenRoshanTime = -999
+local _ROSHAN_SEEN_TTL = 120  -- 2 min — long enough that we remember after he goes back into fog
+
 function J.GetCurrentRoshanLocation()
-	-- 7.41: Roshan's pit preference switched (day/night swap)
-	if J.CheckTimeOfDay() == 'day'
-	then
+	-- Try to find the actual Roshan on the map (works when in vision)
+	local ok, units = pcall(function() return GetUnitList(UNIT_LIST_ENEMIES) end)
+	if ok and units ~= nil then
+		for i = 1, #units do
+			local u = units[i]
+			if u ~= nil and not u:IsNull() and u:IsAlive() then
+				local okN, name = pcall(function() return u:GetUnitName() end)
+				if okN and name == 'npc_dota_roshan' then
+					_lastSeenRoshanLoc = u:GetLocation()
+					_lastSeenRoshanTime = DotaTime()
+					return _lastSeenRoshanLoc
+				end
+			end
+		end
+	end
+
+	-- Recently seen but no longer in vision: trust the cache
+	if _lastSeenRoshanLoc ~= nil and (DotaTime() - _lastSeenRoshanTime) < _ROSHAN_SEEN_TTL then
+		return _lastSeenRoshanLoc
+	end
+
+	-- Fallback heuristic: time-of-day. Imperfect since 7.34+ (Rosh alternates
+	-- pits per spawn, not per day cycle) — but better than always one pit.
+	if J.CheckTimeOfDay() == 'day' then
 		return J.Utils.DireRoshanLoc
 	else
 		return J.Utils.RadiantRoshanLoc
 	end
+end
+
+-- Reset the cache (call when we know Roshan died)
+function J.OnRoshanKilled()
+	_lastSeenRoshanLoc = nil
+	_lastSeenRoshanTime = -999
+end
+
+-- Returns BOTH possible Roshan locations — for callers that want to
+-- check / scout both pits when uncertain.
+function J.GetBothRoshanLocations()
+	return J.Utils.RadiantRoshanLoc, J.Utils.DireRoshanLoc
 end
 
 function J.GetTormentorLocation(team)
