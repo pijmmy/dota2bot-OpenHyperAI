@@ -151,7 +151,11 @@ Customize.Fretbots_AutoEnable = true
 -- Set Enabled = true to start recording. Default false to keep
 -- custom-lobby runs lean.
 Customize.Logger = {
-    Enabled = false,           -- DISABLED until crash root-caused
+    -- Re-enabled after crash root-cause: crash was in ModulateDesire's
+    -- unguarded MaybeRecompute call, NOT in the logger. Logger uses print()
+    -- which Dota's bot VM permits. Output: <Steam>/.../game/dota/console.log
+    -- (requires `-condebug` in Dota launch options).
+    Enabled = true,
     TickInterval = 5.0,
 }
 
