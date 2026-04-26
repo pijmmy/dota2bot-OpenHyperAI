@@ -138,6 +138,23 @@ Customize.Debug = true
 -- The difficulty is still controlled by Customize.Fretbots.Default_Difficulty above.
 Customize.Fretbots_AutoEnable = true
 
+-- ============================================================
+-- Match telemetry logger (aba_logger.lua).
+-- ============================================================
+-- When enabled, every bot writes NDJSON tick + event records to
+-- bots/logs/match_<timestamp>.ndjson during the match. The file is
+-- flushed per write so mid-match reads work (`tail -f` / kill-stream
+-- visible the moment a kill happens — no end-of-match wait). Used by
+-- the guineapig sim's `python -m sim.review <logfile>` to diagnose bot
+-- behavior anti-patterns without a human having to watch and report.
+--
+-- Set Enabled = true to start recording. Default false to keep
+-- custom-lobby runs lean.
+Customize.Logger = {
+    Enabled = false,           -- flip to true to start logging
+    TickInterval = 5.0,        -- seconds between per-bot snapshots
+}
+
 return Customize
 
 

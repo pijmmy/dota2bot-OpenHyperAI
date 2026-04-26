@@ -182,6 +182,26 @@ else
     }
 end
 
+-- Match telemetry logger. Disabled unless Customize.Logger.Enabled.
+local okLG, LoggerModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_logger')
+if okLG and LoggerModule then
+    J.Logger = LoggerModule
+else
+    J.Logger = {
+        Event = function(_, _) end,
+        MaybeTick = function(_) end,
+        AbilityCast = function(_, _, _) end,
+        IntentTransition = function(_, _, _) end,
+        ScoutDelegated = function(_, _) end,
+        MinionStuck = function(_, _, _) end,
+        PollKillStream = function(_) end,
+        Flush = function() end,
+        Close = function() end,
+        IsEnabled = function() return false end,
+        GetPath = function() return nil end,
+    }
+end
+
 -- Phase 11 Item 9: rosh / aegis / buyback state machine.
 local okRS, RoshStateModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_rosh_state')
 if okRS and RoshStateModule then
