@@ -127,6 +127,13 @@ function ____exports.MaybeTick(bot)
     if bot == nil then return end
     local now = DotaTime()
     if now - _last_tick_t < TICK_INTERVAL then return end
+    -- Skip logging during the negative-time pre-game window AND the first
+    -- 30s of game time. Dota's m_pActiveBotMode is null until the engine
+    -- has picked a mode for each bot — and bot:GetActiveMode() ASSERTS at
+    -- the C level if called when the pointer is null. pcall cannot catch a
+    -- C-level access violation; it crashes the whole engine. Gating on
+    -- DotaTime > 30 avoids the window where this is risky.
+    if now < 30 then return end
     _last_tick_t = now
 
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
@@ -134,8 +141,9 @@ function ____exports.MaybeTick(bot)
     local okHp, hp = pcall(function() return bot:GetHealth() / math.max(1, bot:GetMaxHealth()) end)
     local okNW, nw = pcall(function() return bot:GetNetWorth() end)
     local okLvl, lvl = pcall(function() return bot:GetLevel() end)
-    local okMode, mode = pcall(function() return bot:GetActiveMode() end)
-    local okMD, mdesire = pcall(function() return bot:GetActiveModeDesire() end)
+    -- DELIBERATELY DO NOT CALL bot:GetActiveMode() — see comment above.
+    -- bot:GetActiveModeDesire() goes through the same null-check path and
+    -- is also unsafe at start-of-match. Both removed.
     local okLoc, loc = pcall(function() return bot:GetLocation() end)
 
     local intent = nil
@@ -151,8 +159,6 @@ function ____exports.MaybeTick(bot)
         hp_pct = okHp and hp or -1,
         networth = okNW and nw or 0,
         level = okLvl and lvl or 0,
-        mode = okMode and mode or 0,
-        mode_desire = okMD and mdesire or 0,
         x = (okLoc and loc) and loc.x or 0,
         y = (okLoc and loc) and loc.y or 0,
         intent = intent,
