@@ -1,26 +1,29 @@
 --[[ Match telemetry logger.
 
-     Writes per-tick + per-event records to Dota's console output via
-     `print()`. With Dota launched with `-condebug` in launch options,
-     these lines are captured to:
+     Phase 12.1 — empirical probe + dispatch.
 
-         <Steam>/steamapps/common/dota 2 beta/game/dota/console.log
+     Lua print() in Dota's bot script VM does NOT route to console.log.
+     Verified empirically: a full match with -condebug enabled showed
+     ZERO [ABA_LOG] lines, and OHA's own existing print()-based debug
+     statements ([OHA draft], [OHA t=Xs] intent: ...) also never appeared.
 
-     The file is appended in real time so mid-match reads / kill-stream
-     work. Each record is one line:
+     Source 2 server.dll exposes other vscript output primitives that
+     MIGHT route to console.log:
+       - SendToServerConsole(cmd)  -- runs a server console command
+       - SendToConsole(cmd)        -- runs a console command
+       - Msg(text)                 -- engine console message (often)
+       - Warning(text)             -- engine warning channel
 
-         [ABA_LOG] {"type":"tick","t":300,"pid":0,"hero":"...","intent":"farm",...}
+     This file's first job is to determine which one(s) work. On the
+     first call to MaybeTick, we fire ONE probe line per candidate
+     primitive, each tagged with a unique prefix. After the user plays
+     a brief match (30s+), grepping console.log for the tags reveals
+     which primitive(s) reach disk. Then we hard-wire the logger to use
+     the winning one(s).
 
-     A Python-side tailer (sim.review) filters lines starting with the
-     [ABA_LOG] prefix, strips it, parses the JSON.
-
-     IMPORTANT: previous version used `io.open` for direct file writes.
-     Dota's bot script VM sandboxes io.open — calling it crashed bot
-     loading during hero selection. `print()` is the supported logging
-     primitive. This rewrite uses ONLY print(), no file I/O.
-
-     Disabled by default; opt-in via Customize.Logger.Enabled. Exposed
-     as J.Logger.* via jmz_func.lua.
+     Until the probe completes, real telemetry uses ALL primitives at
+     once — wasteful but guarantees that whichever primitive works,
+     records get captured.
      ]]
 local ____exports = {}
 
@@ -37,15 +40,14 @@ if Customize and Customize.Logger then
     TICK_INTERVAL = Customize.Logger.TickInterval or TICK_INTERVAL
 end
 
--- Prefix that the Python tailer (sim.review) greps for. Don't change without
--- updating sim/review.py LOG_PREFIX in lockstep.
 local LOG_PREFIX = "[ABA_LOG] "
 
 local _last_tick_t = -999
 local _initialized = false
+local _probe_done = false
 
 -- ============================================================
--- Inline JSON encoder (no third-party deps; Dota Lua doesn't ship one)
+-- Inline JSON encoder (no third-party deps)
 -- ============================================================
 
 local function json_escape(s)
@@ -91,35 +93,115 @@ local function json_value(v)
 end
 
 -- ============================================================
--- Public API
+-- Probe: write ONE line per candidate primitive at startup
+--
+-- Each line is tagged with a unique sentinel so I (Claude) can grep
+-- the resulting console.log to see which primitive(s) actually wrote.
+-- After the probe, I'll rewrite this module to use only the winner(s).
 -- ============================================================
 
-local function emit(rec)
-    -- Single point of failure: print() can't crash but it can be no-op'd
-    -- without -condebug. If the user has -condebug, lines append to
-    -- console.log immediately. If not, lines still go to the in-game
-    -- developer console (toggleable with backtick in-game).
-    local ok, encoded = pcall(json_value, rec)
-    if not ok then return end
-    print(LOG_PREFIX .. encoded)
+local function safe_call(fn, ...)
+    if fn == nil then return false end
+    local ok = pcall(fn, ...)
+    return ok
 end
+
+local function run_probe()
+    if _probe_done then return end
+    _probe_done = true
+
+    -- Tag schema: [ABA_PROBE/<primitive>] <payload>
+    -- Grep `[ABA_PROBE/` in console.log to see which made it through.
+    local payload = "hello-from-bot-script-t" .. tostring(math.floor(DotaTime()))
+
+    -- 1. Plain Lua print
+    safe_call(print, "[ABA_PROBE/print] " .. payload)
+
+    -- 2. Source engine Msg (if exposed)
+    if _G.Msg ~= nil then
+        safe_call(_G.Msg, "[ABA_PROBE/Msg] " .. payload .. "\n")
+    else
+        safe_call(print, "[ABA_PROBE/Msg-MISSING] (Msg not in _G)")
+    end
+
+    -- 3. Source engine Warning
+    if _G.Warning ~= nil then
+        safe_call(_G.Warning, "[ABA_PROBE/Warning] " .. payload .. "\n")
+    else
+        safe_call(print, "[ABA_PROBE/Warning-MISSING] (Warning not in _G)")
+    end
+
+    -- 4. SendToServerConsole — most likely candidate per server.dll symbols
+    if _G.SendToServerConsole ~= nil then
+        safe_call(_G.SendToServerConsole, "echo [ABA_PROBE/SendToServerConsole] " .. payload)
+    else
+        safe_call(print, "[ABA_PROBE/SendToServerConsole-MISSING]")
+    end
+
+    -- 5. SendToConsole
+    if _G.SendToConsole ~= nil then
+        safe_call(_G.SendToConsole, "echo [ABA_PROBE/SendToConsole] " .. payload)
+    else
+        safe_call(print, "[ABA_PROBE/SendToConsole-MISSING]")
+    end
+
+    -- 6. printl (Source 2 specific helper, sometimes bound)
+    if _G.printl ~= nil then
+        safe_call(_G.printl, "[ABA_PROBE/printl] " .. payload)
+    else
+        safe_call(print, "[ABA_PROBE/printl-MISSING]")
+    end
+
+    -- 7. MsgN (Msg with newline, Source convention)
+    if _G.MsgN ~= nil then
+        safe_call(_G.MsgN, "[ABA_PROBE/MsgN] " .. payload)
+    else
+        safe_call(print, "[ABA_PROBE/MsgN-MISSING]")
+    end
+end
+
+-- ============================================================
+-- Multi-sink emit: until probe is verified, fire on every working
+-- primitive in parallel so SOMETHING reaches the log.
+-- ============================================================
+
+local function emit_multi(line)
+    -- Lua print
+    pcall(print, line)
+    -- echo to server console (works if SendToServerConsole is bound)
+    if _G.SendToServerConsole ~= nil then
+        pcall(_G.SendToServerConsole, "echo " .. line)
+    end
+    if _G.SendToConsole ~= nil then
+        pcall(_G.SendToConsole, "echo " .. line)
+    end
+    if _G.Msg ~= nil then
+        pcall(_G.Msg, line .. "\n")
+    end
+end
+
+-- ============================================================
+-- Public API
+-- ============================================================
 
 function ____exports.Event(kind, fields)
     if not LOGGER_ENABLED then return end
     if not _initialized then
         _initialized = true
-        emit({
+        run_probe()
+        local rec = {
             type = "session_start",
             t = DotaTime(),
             gt = GameTime(),
             team = GetTeam(),
-        })
+        }
+        emit_multi(LOG_PREFIX .. json_value(rec))
     end
     local rec = { type = kind, t = DotaTime(), gt = GameTime() }
     if type(fields) == "table" then
         for k, v in pairs(fields) do rec[k] = v end
     end
-    emit(rec)
+    emit_multi(LOG_PREFIX .. json_value(rec))
 end
 
 function ____exports.MaybeTick(bot)
@@ -127,12 +209,8 @@ function ____exports.MaybeTick(bot)
     if bot == nil then return end
     local now = DotaTime()
     if now - _last_tick_t < TICK_INTERVAL then return end
-    -- Skip logging during the negative-time pre-game window AND the first
-    -- 30s of game time. Dota's m_pActiveBotMode is null until the engine
-    -- has picked a mode for each bot — and bot:GetActiveMode() ASSERTS at
-    -- the C level if called when the pointer is null. pcall cannot catch a
-    -- C-level access violation; it crashes the whole engine. Gating on
-    -- DotaTime > 30 avoids the window where this is risky.
+    -- Wait until engine is fully set up before snapshotting (avoids the
+    -- m_pActiveBotMode null assertion crash).
     if now < 30 then return end
     _last_tick_t = now
 
@@ -141,9 +219,6 @@ function ____exports.MaybeTick(bot)
     local okHp, hp = pcall(function() return bot:GetHealth() / math.max(1, bot:GetMaxHealth()) end)
     local okNW, nw = pcall(function() return bot:GetNetWorth() end)
     local okLvl, lvl = pcall(function() return bot:GetLevel() end)
-    -- DELIBERATELY DO NOT CALL bot:GetActiveMode() — see comment above.
-    -- bot:GetActiveModeDesire() goes through the same null-check path and
-    -- is also unsafe at start-of-match. Both removed.
     local okLoc, loc = pcall(function() return bot:GetLocation() end)
 
     local intent = nil
@@ -179,11 +254,7 @@ end
 
 function ____exports.IntentTransition(prev_intent, new_intent, reason)
     if not LOGGER_ENABLED then return end
-    ____exports.Event("intent_transition", {
-        prev = prev_intent,
-        next = new_intent,
-        reason = reason,
-    })
+    ____exports.Event("intent_transition", { prev = prev_intent, next = new_intent, reason = reason })
 end
 
 function ____exports.ScoutDelegated(task, owner_pid)
@@ -201,11 +272,6 @@ function ____exports.MinionStuck(bot, minionName, ticks)
     })
 end
 
--- ============================================================
--- Kill-stream — polls every bot's GetKills/GetDeaths each tick.
--- Emits records the moment a counter increments so log shows kills live.
--- ============================================================
-
 local _last_kills = {}
 local _last_deaths = {}
 local _last_alive = {}
@@ -213,6 +279,7 @@ local _last_alive = {}
 function ____exports.PollKillStream(bot)
     if not LOGGER_ENABLED then return end
     if bot == nil then return end
+    if DotaTime() < 30 then return end
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
     if not okPid then return end
     local okN, hero = pcall(function() return bot:GetUnitName() end)
@@ -256,8 +323,8 @@ function ____exports.PollKillStream(bot)
 end
 
 function ____exports.IsEnabled() return LOGGER_ENABLED end
-function ____exports.Flush() end   -- no-op: print() already auto-flushes
-function ____exports.Close() end   -- no-op: console.log is managed by Dota
-function ____exports.GetPath() return "console.log (via -condebug)" end
+function ____exports.Flush() end
+function ____exports.Close() end
+function ____exports.GetPath() return "console.log (via -condebug + working primitive TBD)" end
 
 return ____exports
