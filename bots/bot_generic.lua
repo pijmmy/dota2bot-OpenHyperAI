@@ -6,13 +6,17 @@ local Utils = require( GetScriptDirectory()..'/FunLib/utils' )
 local BotBuild = dofile(GetScriptDirectory() .. "/BotLib/" .. string.gsub(botName, "npc_dota_", ""));
 
 -- Telemetry logger: throttled snapshots + kill-stream polling. Disabled
--- unless Customize.Logger.Enabled. Writes NDJSON to bots/logs/match_*.ndjson;
--- flushed per event so mid-match `tail -f` works.
-local _ok_logger, _Logger = pcall(require, GetScriptDirectory()..'/FunLib/aba_logger')
-if _ok_logger and _Logger and _Logger.IsEnabled and _Logger.IsEnabled() then
-    _Logger.MaybeTick(bot)
-    _Logger.PollKillStream(bot)
-end
+-- unless Customize.Logger.Enabled. Wrapped in nested pcall so any error
+-- inside the logger CANNOT crash bot loading or per-tick execution —
+-- previous version crashed Dota during hero selection because io.open()
+-- is sandboxed.
+pcall(function()
+    local _ok_logger, _Logger = pcall(require, GetScriptDirectory()..'/FunLib/aba_logger')
+    if _ok_logger and _Logger and _Logger.IsEnabled and _Logger.IsEnabled() then
+        pcall(_Logger.MaybeTick, bot)
+        pcall(_Logger.PollKillStream, bot)
+    end
+end)
 
 if BotBuild == nil
 then

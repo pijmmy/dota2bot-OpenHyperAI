@@ -151,8 +151,10 @@ Customize.Fretbots_AutoEnable = true
 -- Set Enabled = true to start recording. Default false to keep
 -- custom-lobby runs lean.
 Customize.Logger = {
-    Enabled = true,            -- writing NDJSON logs to bots/logs/match_*.ndjson
-    TickInterval = 5.0,        -- seconds between per-bot snapshots
+    Enabled = false,           -- DISABLED: io.open is sandboxed by Dota,
+                                -- crashed bot loading. Rewrite needed to
+                                -- use print() -> console.log pattern.
+    TickInterval = 5.0,
 }
 
 return Customize
