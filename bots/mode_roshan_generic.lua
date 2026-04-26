@@ -21,6 +21,26 @@ local initDPSFlag = false
 local Roshan
 
 function GetDesire()
+	-- Tick the team-state blackboard. Only the leader actually does work;
+	-- everyone else just lets it run cheap.
+	if J.TeamState and J.TeamState.MaybeUpdate then
+		J.TeamState.MaybeUpdate(bot)
+	end
+
+	-- Scout delegation gate: if the team hasn't committed to rosh yet, only
+	-- the delegated scout pursues this mode. Other bots return desire 0 so
+	-- they don't 5-man-converge on an unverified rosh pit (the user complaint
+	-- "you don't need the whole team to check"). Once the scout reports
+	-- "alive" with >=0.8 confidence, J.TeamState.IsTeamCommitted("rosh")
+	-- flips true and everyone is allowed to pursue.
+	if J.TeamState and J.TeamState.IsScoutFor and J.TeamState.IsTeamCommitted then
+		local committed = J.TeamState.IsTeamCommitted("rosh")
+		local is_scout = J.TeamState.IsScoutFor(bot, "rosh")
+		if not committed and not is_scout then
+			return BOT_MODE_DESIRE_NONE
+		end
+	end
+
 	local res = GetDesireHelper()
 	if res > 0.6 then J.ModeAnnounce(bot, 'say_roshan', 30) end
 	return J.Personality.ModulateDesire(bot, res, 'roshan')

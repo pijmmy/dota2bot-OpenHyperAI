@@ -125,6 +125,23 @@ else
     }
 end
 
+-- Shared team blackboard / scout-delegation pattern. Used to avoid 5-bot
+-- redundant Roshan checks; one bot is delegated to scout, team commits via
+-- team-plan only after the scout reports.
+local okTS, TeamStateModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_team_state')
+if okTS and TeamStateModule then
+    J.TeamState = TeamStateModule
+else
+    print('[WARN] aba_team_state not loaded: '..tostring(TeamStateModule))
+    J.TeamState = {
+        MaybeUpdate = function(_) end,
+        IsScoutFor = function(_, _) return false end,
+        GetScoutResult = function(_) return "unknown", 0.0 end,
+        IsTeamCommitted = function(_) return false end,
+        Describe = function() return "stub" end,
+    }
+end
+
 -- Draft-analyzed match strategy (replaces random team_mood with data-driven).
 -- Uses scraped OpenDota hero stats (bots/FunLib/data/*.lua) to classify our
 -- team's composition and pick a strategy grounded in the actual draft.

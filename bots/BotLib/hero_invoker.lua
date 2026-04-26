@@ -131,39 +131,51 @@ function X.MinionThink(hMinionUnit)
     if Utils.IsUnitWithName(hMinionUnit, 'forged_spirit') then
         local botTarget = J.GetProperTarget(bot)
         local unitTarget = hMinionUnit:GetAttackTarget()
-        if unitTarget == nil then hMinionUnit:GetTarget() end
-        
-        -- 如果没塔 或者 目标血量低，则攻击目标
-        local nEnemyTowers = bot:GetNearbyTowers(700, true)
-        if botTarget ~= nil and (#nEnemyTowers < 1 or J.GetHP(botTarget) < 0.2) then
-            if botTarget ~= nil then
-                hMinionUnit:Action_AttackUnit(botTarget, false)
-                return
-            end
-        end
 
-        -- 可带线push
-        if unitTarget ~= nil and (#nEnemyTowers < 1 or J.GetHP(unitTarget) < 0.2) then
-            if unitTarget ~= nil then
-                hMinionUnit:Action_AttackUnit(unitTarget, false)
-                return
-            end
-            -- 没固定目标，fallback
-            Minion.MinionThink(hMinionUnit)
-        end
-        
-        -- 如果不是冒死也要杀死目前的情况，不要送
-        if J.GetHP(hMinionUnit) < 0.5 and botTarget ~= nil and J.IsInRange(hMinionUnit, botTarget, botTarget:GetAttackRange()) then
+        -- Self-preservation: low-HP spirit retreats. Keep this first so it can't
+        -- be overridden by an attack order from a later branch.
+        if J.GetHP(hMinionUnit) < 0.35 then
             hMinionUnit:Action_MoveToLocation(J.GetTeamFountain())
             return
         end
 
-        -- 没合适目标进攻，回到卡尔身边
-        -- todo: 小心巫妖大，或者卡自己位
-        if J.IsLaning(bot) or J.IsFarming(bot) then
-            if GetUnitToUnitDistance(hMinionUnit, bot) > 500 then
-                hMinionUnit:Action_AttackMove(bot:GetLocation() + RandomVector(220))
-            end
+        -- Priority 1: attack the bot's chosen target. The previous code gated
+        -- this on "no enemy towers within 700u of the BOT", which silently
+        -- disabled the spirits during every objective push — they'd just stand
+        -- still next to Invoker while he tried to siege. Spirits have 800
+        -- attack range; let them do their job.
+        if botTarget ~= nil and not botTarget:IsNull() and botTarget:IsAlive() then
+            hMinionUnit:Action_AttackUnit(botTarget, false)
+            return
+        end
+
+        -- Priority 2: keep attacking whoever the spirit currently has targeted.
+        if unitTarget ~= nil and not unitTarget:IsNull() and unitTarget:IsAlive() then
+            hMinionUnit:Action_AttackUnit(unitTarget, false)
+            return
+        end
+
+        -- Priority 3: opportunistic — attack nearest enemy within range.
+        local nearEnemies = hMinionUnit:GetNearbyHeroes(900, true, BOT_MODE_NONE) or {}
+        if #nearEnemies > 0 then
+            hMinionUnit:Action_AttackUnit(nearEnemies[1], false)
+            return
+        end
+        local nearCreeps = hMinionUnit:GetNearbyLaneCreeps(700, true) or {}
+        if #nearCreeps > 0 then
+            hMinionUnit:Action_AttackUnit(nearCreeps[1], false)
+            return
+        end
+
+        -- Priority 4: if nothing in range, follow the bot. Default behavior
+        -- regardless of laning/farming flags so spirits don't go AFK during
+        -- teamfights or rotations (the previous bug).
+        if GetUnitToUnitDistance(hMinionUnit, bot) > 500 then
+            hMinionUnit:Action_AttackMove(bot:GetLocation() + RandomVector(220))
+        else
+            -- Within 500u of bot but no targets — attack-move forward in bot's
+            -- facing direction so spirits aren't paralyzed in idle moments.
+            hMinionUnit:Action_AttackMove(bot:GetLocation() + bot:GetFacing() * 200 + RandomVector(150))
         end
     else
         Minion.MinionThink(hMinionUnit)
