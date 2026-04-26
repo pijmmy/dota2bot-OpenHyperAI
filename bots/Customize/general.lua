@@ -151,7 +151,7 @@ Customize.Fretbots_AutoEnable = true
 -- Set Enabled = true to start recording. Default false to keep
 -- custom-lobby runs lean.
 Customize.Logger = {
-    Enabled = false,           -- flip to true to start logging
+    Enabled = true,            -- writing NDJSON logs to bots/logs/match_*.ndjson
     TickInterval = 5.0,        -- seconds between per-bot snapshots
 }
 
