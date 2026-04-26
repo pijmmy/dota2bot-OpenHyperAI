@@ -138,26 +138,12 @@ Customize.Debug = true
 -- The difficulty is still controlled by Customize.Fretbots.Default_Difficulty above.
 Customize.Fretbots_AutoEnable = true
 
--- ============================================================
--- Match telemetry logger (aba_logger.lua).
--- ============================================================
--- When enabled, every bot writes NDJSON tick + event records to
--- bots/logs/match_<timestamp>.ndjson during the match. The file is
--- flushed per write so mid-match reads work (`tail -f` / kill-stream
--- visible the moment a kill happens — no end-of-match wait). Used by
--- the guineapig sim's `python -m sim.review <logfile>` to diagnose bot
--- behavior anti-patterns without a human having to watch and report.
---
--- Set Enabled = true to start recording. Default false to keep
--- custom-lobby runs lean.
-Customize.Logger = {
-    -- Re-enabled after crash root-cause: crash was in ModulateDesire's
-    -- unguarded MaybeRecompute call, NOT in the logger. Logger uses print()
-    -- which Dota's bot VM permits. Output: <Steam>/.../game/dota/console.log
-    -- (requires `-condebug` in Dota launch options).
-    Enabled = true,
-    TickInterval = 5.0,
-}
+-- (Lua-side telemetry logger removed in Phase 13 — Dota's bot script VM
+-- doesn't route print() to console.log even with -condebug. Empirically
+-- verified via probe match: all candidate primitives (print, Msg, Warning,
+-- SendToServerConsole, SendToConsole, printl, MsgN) reach only the in-game
+-- devconsole. Replay-file (.dem) parsing replaces the logger; see
+-- dota2-guineapig-extreme/sim/replay_dem.py.)
 
 return Customize
 

@@ -11,54 +11,40 @@ This skill triages the latest log automatically and reports back specific bot an
 
 ## Workflow
 
-### 1. Run the review
+### 1. Run the .dem summary
 
-Always invoke from the guineapig repo because that's where `sim.review` lives:
+The Lua-side print logger was empirically proven not to reach disk
+(see `sim/replay_dem.py` docstring). The current review pipeline reads
+the auto-saved Dota replay (`<Dota>/replays/auto-*.dem`) instead.
 
 ```bash
-cd "C:\Users\User\Desktop\Dota2 Guineapig extreme" && python -m sim.review --json
+cd "C:\Users\User\Desktop\Dota2 Guineapig extreme" && python -m sim.replay_dem --json
 ```
 
-`sim.review` auto-discovers the most recently modified `match_*.ndjson` in:
-- `C:\Users\User\Desktop\Dota 2 Open Hyper AI\bots\logs\`
-- (fallback) Steam install paths
+`sim.replay_dem` auto-discovers the most recently modified `auto-*.dem`
+in `<Dota>/replays/`. Returns JSON with:
 
-It returns a JSON object with this shape:
+- `duration_min` — match length
+- `heroes_played` — all hero names that appeared (both teams)
+- `buildings_seen` — all towers/rax/ancient referenced
+- `items_seen_count` / `items_sample` — items detected in the replay
+- `caveats` — explains what the .dem CANNOT tell us
 
-```json
-{
-  "log_duration_sec": 2400,
-  "total_ticks": 480,
-  "kills_logged": 14,
-  "deaths_logged": 12,
-  "intent_transitions": 47,
-  "findings": [
-    {
-      "id": "minion.idle.forged_spirit",
-      "severity": "high",
-      "score": 8,
-      "when": 420,
-      "who": "forged_spirit",
-      "message": "...",
-      "suspected_cause": "...",
-      "suggested_fix": "..."
-    }
-  ]
-}
-```
+### 2. Honest limits
 
-### 2. Handle the no-log case
+The .dem has the **outcome** (kills, towers, items) but NOT the bot
+**process** (which intent fired when, why a mode returned 0 desire,
+whether a forged spirit got an attack order). Extracting outcomes
+correctly from .dem requires full protobuf parsing of CDOTA combat
+log messages — not yet built. The current parser is string-pattern
+based.
 
-If `sim.review` fails with "No console.log found" or returns empty findings with a "no [ABA_LOG] records found" note, two things to check:
-
-> **Logger not capturing.** For telemetry to land in `console.log`, two requirements:
->
-> 1. Dota 2 launch options must include `-condebug`. In Steam: right-click Dota 2 → Properties → Launch Options → add `-condebug`.
-> 2. `bots/Customize/general.lua` must have `Customize.Logger.Enabled = true` (default after Phase 12).
->
-> Then play a match. Output goes to `<Steam>/steamapps/common/dota 2 beta/game/dota/console.log` and is appended live (mid-match `tail -f` works).
-
-Don't try to read the in-game console manually — `sim.review` already extracts records via the `[ABA_LOG]` prefix.
+So this skill gives you a **factual match summary** and that's it.
+For behavioral diagnosis ("why did Pudge stand still", "why did
+spirits not attack") I still need a verbal description from you of
+what you saw in-game. The auto-diagnose loop is incomplete until
+either (a) Java + clarity get installed, (b) someone writes a full
+Python Dota .dem parser, or (c) Valve fixes vscript print routing.
 
 ### 3. Present findings
 
