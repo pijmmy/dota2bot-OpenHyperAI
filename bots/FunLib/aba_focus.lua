@@ -233,4 +233,94 @@ function ____exports.Describe()
     return name .. " [" .. f.reason .. " score=" .. string.format("%.2f", f.score) .. "]"
 end
 
+-- ============================================================
+-- Phase 11 Item 10: objective-aware smoke target scoring.
+--
+-- Smoke target ≠ teamfight focus. Pre-fight smoke target should maximize
+-- MAP SWING after kill, not just damage potential during fight. A kill
+-- on a slightly lower-value hero is the right smoke pick if it removes
+-- the only safe-lane defender or unlocks Roshan.
+-- ============================================================
+
+local SUPPORT_HEROES = {
+    npc_dota_hero_dazzle = true,
+    npc_dota_hero_oracle = true,
+    npc_dota_hero_disruptor = true,
+    npc_dota_hero_warlock = true,
+    npc_dota_hero_witch_doctor = true,
+    npc_dota_hero_lich = true,
+    npc_dota_hero_keeper_of_the_light = true,
+    npc_dota_hero_chen = true,
+    npc_dota_hero_io = true,
+    npc_dota_hero_treant = true,
+    npc_dota_hero_omniknight = true,
+}
+
+local CARRY_HEROES = {
+    npc_dota_hero_antimage = true,
+    npc_dota_hero_spectre = true,
+    npc_dota_hero_medusa = true,
+    npc_dota_hero_terrorblade = true,
+    npc_dota_hero_phantom_lancer = true,
+    npc_dota_hero_naga_siren = true,
+}
+
+local function scoreSmokeTarget(enemyUnit)
+    if enemyUnit == nil or not enemyUnit:IsAlive() then return -1 end
+    local okN, name = pcall(function() return enemyUnit:GetUnitName() end)
+    if not okN then return -1 end
+
+    -- Isolation: distance from enemy team's nearest ally hero
+    local nearAllies = enemyUnit:GetNearbyHeroes(1500, false, BOT_MODE_NONE) or {}
+    local isolation = math.min(3, #nearAllies == 0 and 3 or (1500 / math.max(400, GetUnitToUnitDistance(enemyUnit, nearAllies[1]))))
+
+    -- HP factor: low HP = easier kill
+    local hp = enemyUnit:GetHealth() / math.max(1, enemyUnit:GetMaxHealth())
+    local hp_factor = (1 - hp) * 1.5
+
+    -- Buyback unavailability (late game): big swing if dead enemy can't bb
+    local no_bb = 0
+    if DotaTime() > 25 * 60 then
+        local okBB, bb = pcall(function() return enemyUnit:GetBuybackCost() end)
+        if okBB and type(bb) == "number" then
+            local okG, g = pcall(function() return enemyUnit:GetGold() end)
+            if okG and g ~= nil and g < bb then no_bb = 2 end
+        end
+    end
+
+    -- Utility / support kill = bigger map swing (removes saves, vision)
+    local utility = SUPPORT_HEROES[name] and 1.5 or 0
+
+    -- Carry kill late = high value
+    local nw = enemyUnit:GetNetWorth() or 0
+    local nw_value = nw / 5000  -- normalize ~ [0, 4]
+
+    -- Carry-specific: late-game carry kills enable rosh + push
+    if CARRY_HEROES[name] and DotaTime() > 25 * 60 then
+        nw_value = nw_value * 1.3
+    end
+
+    return 1.5 * isolation + hp_factor + no_bb + utility + 0.5 * nw_value
+end
+
+-- Returns the best smoke target (the enemy whose death gives biggest
+-- map swing). Different from GetFocus — smoke targets can be lower-HP
+-- supports while focus targets are typically high-value cores.
+function ____exports.GetSmokeTarget()
+    local enemyTeam = GetOpposingTeam()
+    local enemies = GetUnitList(UNIT_LIST_ENEMY_HEROES) or {}
+    local best = nil
+    local best_score = -1
+    for _, e in pairs(enemies) do
+        if e ~= nil and not e:IsNull() and e:IsAlive() and not e:IsIllusion() then
+            local s = scoreSmokeTarget(e)
+            if s > best_score then
+                best_score = s
+                best = e
+            end
+        end
+    end
+    return best, best_score
+end
+
 return ____exports

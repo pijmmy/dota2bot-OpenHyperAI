@@ -508,6 +508,48 @@ function ____exports.GetSpikeState(heroName, dotaTimeSeconds)
     return "in"
 end
 
+-- Phase 11 Item 6: dynamic NW-relative spike windows. Replaces static
+-- per-hero spike windows with a NW-pace-shifted version. A fed Anti-Mage
+-- (1.5x p50 GPM) spikes ~33% earlier than the static window says; a
+-- starved one spikes ~67% later. Clamped to [0.5x, 1.6x] so wild swings
+-- can't push the spike to minute-5 or to never.
+function ____exports.GetDynamicSpikeState(bot, dotaTimeSeconds)
+    if bot == nil then return "mid", 0 end
+    local okN, heroName = pcall(function() return bot:GetUnitName() end)
+    if not okN or type(heroName) ~= "string" then return "mid", 0 end
+    local s = SPIKES[heroName]
+    local bm = BENCHMARKS[heroName]
+    if s == nil then return "mid", 0 end
+
+    local startMin = s.spike_window_start_min or 0
+    local endMin = s.spike_window_end_min or 0
+    local centerMin = (startMin + endMin) / 2
+
+    local nw_ratio = 1.0
+    if bm and bm.gpm_p50 and dotaTimeSeconds > 60 then
+        local okNW, nw = pcall(function() return bot:GetNetWorth() end)
+        if okNW and nw then
+            local currentGPM = nw * 60 / dotaTimeSeconds
+            nw_ratio = currentGPM / math.max(1, bm.gpm_p50)
+        end
+    end
+    if nw_ratio < 0.5 then nw_ratio = 0.5 end
+    if nw_ratio > 1.6 then nw_ratio = 1.6 end
+
+    local effective_center_min = centerMin / nw_ratio
+    local effective_start = effective_center_min - (centerMin - startMin)
+    local effective_end = effective_center_min + (endMin - centerMin)
+
+    local nowMin = dotaTimeSeconds / 60
+    if nowMin < effective_start then
+        return "pre", math.max(0, 1 - (effective_start - nowMin) / 5)
+    elseif nowMin > effective_end then
+        return "post", math.max(0, 1 - (nowMin - effective_end) / 10)
+    else
+        return "in", 1.0
+    end
+end
+
 -- ============================================================
 -- Debug
 -- ============================================================

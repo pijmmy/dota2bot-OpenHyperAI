@@ -127,7 +127,8 @@ end
 
 -- Shared team blackboard / scout-delegation pattern. Used to avoid 5-bot
 -- redundant Roshan checks; one bot is delegated to scout, team commits via
--- team-plan only after the scout reports.
+-- team-plan only after the scout reports. Also tracks perceived enemies,
+-- macro alert, and lane pressure (Phase 11 items 2/3/8).
 local okTS, TeamStateModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_team_state')
 if okTS and TeamStateModule then
     J.TeamState = TeamStateModule
@@ -138,6 +139,60 @@ else
         IsScoutFor = function(_, _) return false end,
         GetScoutResult = function(_) return "unknown", 0.0 end,
         IsTeamCommitted = function(_) return false end,
+        GetPerceivedEnemy = function(_) return nil end,
+        CountMissingEnemies = function(_) return 0 end,
+        MeanPerceivedConfidence = function() return 0 end,
+        ShouldEngage = function(_) return true end,
+        GetMacroAlert = function() return "GREEN" end,
+        ApplyMacroAlertMult = function(d, _) return d end,
+        GetGankAlert = function() return { severity = 0, target_zone = "none", expires_at = 0 } end,
+        GetLanePressure = function(_) return 0 end,
+        Describe = function() return "stub" end,
+    }
+end
+
+-- Phase 11 Item 4: convex commitment + abort triggers. Replaces binary
+-- TACTIC_TIMEOUT-based behavior with progress-driven ramp + abort.
+local okCM, CommitModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_commitment')
+if okCM and CommitModule then
+    J.Commitment = CommitModule
+else
+    J.Commitment = {
+        Tick = function(_) end,
+        GetProgress = function(_) return 0 end,
+        GetDesireBonus = function(_) return 0 end,
+        ShouldAbort = function(_) return false end,
+        Reset = function(_) end,
+        Describe = function() return "stub" end,
+    }
+end
+
+-- Phase 11 Item 7: counter-strategy modifiers per enemy archetype.
+local okCN, CounterModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_counter')
+if okCN and CounterModule then
+    J.Counter = CounterModule
+else
+    J.Counter = {
+        GetEnemyArchetype = function() return "balanced" end,
+        GetIntentMultiplier = function(_) return 1.0 end,
+        GetSpreadRadius = function() return 400 end,
+        CanFiveMan = function() return true end,
+        GetItemPriority = function(_) return 1.0 end,
+        Describe = function() return "stub" end,
+    }
+end
+
+-- Phase 11 Item 9: rosh / aegis / buyback state machine.
+local okRS, RoshStateModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_rosh_state')
+if okRS and RoshStateModule then
+    J.RoshState = RoshStateModule
+else
+    J.RoshState = {
+        Tick = function() end,
+        GetPhase = function() return "respawned" end,
+        ShouldContestRosh = function() return false end,
+        AegisExpirePressure = function() return 1.0 end,
+        ShouldBuyback = function(_) return false end,
         Describe = function() return "stub" end,
     }
 end

@@ -591,9 +591,24 @@ local function computePlan(bot)
                     effThreshold = math.max(1, effThreshold - 1)
                 end
                 if nearAllies ~= nil and #nearAllies >= effThreshold then
-                    return freshPlan("commit_kill", nil, focusLoc,
-                        "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(effThreshold)
-                        .. " score=" .. string.format("%.2f", target.score or 0))
+                    -- Phase 11 Item 2: info asymmetry gate. Don't commit on
+                    -- a ghost target. ShouldEngage requires fresh perception
+                    -- + not 2+ enemies missing.
+                    local jmzM_for_engage = jmz()
+                    local target_pid = nil
+                    if target.unit ~= nil then
+                        local okPid, pid = pcall(function() return target.unit:GetPlayerID() end)
+                        if okPid then target_pid = pid end
+                    end
+                    local engageOK = true
+                    if jmzM_for_engage and jmzM_for_engage.TeamState and target_pid ~= nil then
+                        engageOK = jmzM_for_engage.TeamState.ShouldEngage(target_pid)
+                    end
+                    if engageOK then
+                        return freshPlan("commit_kill", nil, focusLoc,
+                            "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(effThreshold)
+                            .. " score=" .. string.format("%.2f", target.score or 0))
+                    end
                 end
                 -- Lane-gank path: laning phase + low-HP focus + at least 1 close ally
                 local okLaning, isLaning = pcall(function() return jmz().IsInLaningPhase() end)
@@ -802,6 +817,48 @@ function ____exports.RoleRespondsToIntent(bot)
     return roleRespondsToIntent(pos, currentPlan.intent)
 end
 
+-- Phase 11 Item 11: ε-randomization for mixed strategies. A purely
+-- deterministic intent policy is exploitable: a human who plays vs the
+-- bot enough learns that "if X, bot always does Y". We perturb a small
+-- fraction of decisions among interchangeable alternatives.
+--
+-- Constraints:
+--   - Only swap among CLOSE-PRIORITY intents (push_lane <-> smoke_gank
+--     or smoke_gank <-> regroup). Never swap defend_base or commit_kill.
+--   - Only fire when the alternative is ACTUALLY VIABLE (passes its own
+--     gates). Otherwise swap is a no-op.
+--   - Low rate (8%) so behavior remains mostly predictable but not
+--     mechanical. Higher rates make the bot incoherent.
+local SWAP_PAIRS = {
+    push_lane = "smoke_gank",
+    smoke_gank = "push_lane",
+}
+local _last_swap_time = -999
+local SWAP_COOLDOWN = 5 * 60   -- at most one ε-swap every 5 minutes
+
+local function maybeSwapIntent(plan, bot)
+    if plan == nil or plan.intent == nil then return plan end
+    local alt = SWAP_PAIRS[plan.intent]
+    if alt == nil then return plan end
+    local now = DotaTime()
+    -- Global swap cooldown: prevents the swap from flipping every recompute
+    -- tick on a "lucky" seed and clobbering Phase 9's intent distribution.
+    -- Without this, sim showed radiant getting 31 push / 2 smoke (vs dire's
+    -- balanced 12/10) because radiant's RNG happened to roll < 0.08 often.
+    if now - _last_swap_time < SWAP_COOLDOWN then return plan end
+    if RandomFloat(0, 1) > 0.20 then return plan end
+    _last_swap_time = now
+    return {
+        intent = alt,
+        lane = plan.lane,
+        location = plan.location,
+        validUntil = plan.validUntil,
+        lastComputeTime = plan.lastComputeTime,
+        authorID = plan.authorID,
+        reason = (plan.reason or "") .. " [eps-swap to " .. alt .. "]",
+    }
+end
+
 function ____exports.MaybeRecompute(bot)
     if bot == nil then return currentPlan end
     local now = DotaTime()
@@ -810,6 +867,25 @@ function ____exports.MaybeRecompute(bot)
     end
     local ok, plan = pcall(computePlan, bot)
     if not ok or plan == nil then return currentPlan end
+    -- Apply mixed-strategy ε-noise.
+    plan = maybeSwapIntent(plan, bot)
+    -- Phase 11 Item 4: tick the convex commitment scalar for the new intent.
+    local okC, Commit = pcall(require, GetScriptDirectory().."/FunLib/aba_commitment")
+    if okC and Commit and Commit.Tick then
+        Commit.Tick(plan.intent)
+        if Commit.ShouldAbort and Commit.ShouldAbort(plan.intent) then
+            -- Hard abort: replace plan with regroup, reset progress.
+            Commit.Reset(plan.intent)
+            plan = {
+                intent = "regroup",
+                lane = nil, location = nil,
+                validUntil = now + 6,
+                lastComputeTime = now,
+                authorID = plan.authorID,
+                reason = "abort: " .. plan.intent,
+            }
+        end
+    end
     plan.lastComputeTime = now
     plan.validUntil = now + PLAN_TTL
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)

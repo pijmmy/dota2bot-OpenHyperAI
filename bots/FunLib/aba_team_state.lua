@@ -41,6 +41,31 @@ local _state = {
     },
     -- Optional: track last-seen rosh body location for the scout to walk to.
     rosh_pit_loc = nil,
+
+    -- Item 2: perceived enemy state. Leader-only writes. Other modules read
+    -- via GetPerceivedEnemy(pid). Encodes "what we last saw vs ground truth"
+    -- with confidence decay so engagement decisions don't act on ghost data.
+    -- Schema: perceived_enemy[pid] = {
+    --   last_seen_pos, last_seen_t, time_since_seen, confidence,
+    --   predicted_pos, last_hp_pct, has_buyback, last_known_visible
+    -- }
+    perceived_enemy = {},
+
+    -- Item 3: macro alert level + plan scorecard. Aggregates indirect signals
+    -- (wave drift, tower chip, missing enemies, ward death, opposite-T fall)
+    -- into a single team-wide threat indicator for desire modulation.
+    macro_alert = "GREEN",   -- GREEN | YELLOW | ORANGE | RED
+    plan_score = {
+        smoke = 0.0, rosh = 0.0,
+        push_top = 0.0, push_mid = 0.0, push_bot = 0.0,
+        split = 0.0, invade_jungle = 0.0,
+    },
+    gank_alert = { severity = 0, target_zone = "none", expires_at = 0 },
+
+    -- Item 8: wave equilibrium signal. lane_pressure[lane] is signed:
+    -- positive = waves pushed toward enemy (we have map control there),
+    -- negative = waves pushed toward us (defensive pressure).
+    lane_pressure = { [1] = 0, [2] = 0, [3] = 0 },  -- LANE_TOP/MID/BOT
 }
 
 -- ============================================================
@@ -189,6 +214,133 @@ local function updateScoutResult(now)
 end
 
 -- ============================================================
+-- Item 2: Perceived enemy state with confidence decay
+-- ============================================================
+
+local function clamp01(x)
+    if x < 0 then return 0 end
+    if x > 1 then return 1 end
+    return x
+end
+
+local function updatePerceivedEnemies(now)
+    local enemyTeam = GetOpposingTeam()
+    local players = GetTeamPlayers(enemyTeam)
+    for i = 1, #players do
+        local pid = players[i]
+        local pe = _state.perceived_enemy[pid]
+        if pe == nil then
+            pe = { time_since_seen = 999, confidence = 0,
+                   has_buyback = true, last_hp_pct = 1.0 }
+            _state.perceived_enemy[pid] = pe
+        end
+
+        local ok, info = pcall(function() return GetHeroLastSeenInfo(pid) end)
+        if ok and info ~= nil and info[1] ~= nil then
+            local first = info[1]
+            local tss = first.time_since_seen or 999
+            pe.time_since_seen = tss
+            pe.last_seen_pos = first.location
+            pe.last_seen_t = now - tss
+            -- Confidence decays linearly to 0 over 15 seconds since last
+            -- visible. Beyond 15s the bot has no real info — should not
+            -- engage on this enemy as if their position is known.
+            pe.confidence = clamp01(1 - tss / 15.0)
+            pe.last_known_visible = (tss < 0.5)
+        else
+            -- No info at all (very early game / dead bot): full uncertainty.
+            pe.confidence = 0
+            pe.time_since_seen = 999
+        end
+    end
+end
+
+-- Item 3: indirect-signal threat assessment
+local function countMissingEnemies(staleSeconds)
+    local n = 0
+    for _, pe in pairs(_state.perceived_enemy) do
+        if (pe.time_since_seen or 999) >= staleSeconds then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+local function updateMacroAlert(now)
+    local missing = countMissingEnemies(8)
+    local mean_conf = 0
+    local count = 0
+    for _, pe in pairs(_state.perceived_enemy) do
+        mean_conf = mean_conf + (pe.confidence or 0)
+        count = count + 1
+    end
+    if count > 0 then mean_conf = mean_conf / count end
+
+    -- Score signals
+    local a = 0
+    if missing >= 3 then a = a + 2 end
+    if missing >= 2 and now > 5 * 60 then a = a + 1 end
+    if mean_conf < 0.3 and now > 8 * 60 then a = a + 1 end
+    -- Ancient threat
+    local ourAncient = pcall(GetAncient, GetTeam()) and GetAncient(GetTeam()) or nil
+    if ourAncient ~= nil then
+        local hp = ourAncient:GetHealth() / math.max(1, ourAncient:GetMaxHealth())
+        if hp < 0.6 then a = a + 2 end
+        if hp < 0.4 then a = a + 1 end
+    end
+
+    local alert = "GREEN"
+    if a >= 4 then alert = "RED"
+    elseif a >= 2 then alert = "YELLOW"
+    end
+    _state.macro_alert = alert
+
+    -- Update gank alert with target zone if many missing
+    if missing >= 3 then
+        -- Compute centroid of last-seen positions of missing enemies
+        local cx, cy, cnt = 0, 0, 0
+        for _, pe in pairs(_state.perceived_enemy) do
+            if (pe.time_since_seen or 999) >= 8 and pe.last_seen_pos then
+                cx = cx + pe.last_seen_pos.x
+                cy = cy + pe.last_seen_pos.y
+                cnt = cnt + 1
+            end
+        end
+        if cnt > 0 then
+            cx = cx / cnt; cy = cy / cnt
+            -- Classify zone by hardcoded thresholds
+            local zone = "neutral"
+            if math.abs(cx) > 4000 then zone = (cx > 0) and "bot_side" or "top_side"
+            elseif math.abs(cy) > 4000 then zone = (cy > 0) and "dire_side" or "radiant_side"
+            else zone = "mid"
+            end
+            _state.gank_alert = {
+                severity = math.min(1.0, missing / 5),
+                target_zone = zone,
+                expires_at = now + 15,
+            }
+        end
+    end
+end
+
+-- Item 8: wave equilibrium update. We don't have direct lane-collision-point
+-- API, so we approximate using GetLaneFrontAmount or fallback to creep
+-- lookup near each lane. Positive = waves toward enemy, negative = toward us.
+local function updateLanePressure()
+    local team = GetTeam()
+    for _, lane in ipairs({1, 2, 3}) do  -- LANE_TOP/MID/BOT
+        local ok, amount = pcall(function() return GetLaneFrontAmount(team, lane, true) end)
+        if ok and type(amount) == "number" then
+            -- amount in [0,1]: 0 = enemy fountain, 1 = our fountain.
+            -- Convert to signed pressure: 0.5 is neutral.
+            -- Positive = enemy pushing toward us is BAD, so we report
+            -- (0.5 - amount) so positive = we're winning the lane.
+            _state.lane_pressure[lane] = (0.5 - amount) * 2  -- [-1, 1]
+        end
+    end
+end
+
+-- ============================================================
 -- Public API
 -- ============================================================
 
@@ -206,8 +358,77 @@ function ____exports.MaybeUpdate(bot)
     end
 
     _state.last_update_t = now
+    updatePerceivedEnemies(now)
+    updateMacroAlert(now)
+    updateLanePressure()
     updateScoutAssignments(now)
     updateScoutResult(now)
+end
+
+-- Item 2: read perceived state for an enemy.
+function ____exports.GetPerceivedEnemy(pid)
+    return _state.perceived_enemy[pid]
+end
+
+-- Item 2: count enemies whose last-seen-info exceeds the given staleness.
+-- Used by team-plan defensive gates ("3+ missing for 8s = back off").
+function ____exports.CountMissingEnemies(staleSeconds)
+    return countMissingEnemies(staleSeconds or 8)
+end
+
+-- Item 2: mean perceived-confidence across visible enemies. Drives the
+-- info_advantage multiplier on offensive intents.
+function ____exports.MeanPerceivedConfidence()
+    local total, n = 0, 0
+    for _, pe in pairs(_state.perceived_enemy) do
+        if (pe.time_since_seen or 999) < 30 then
+            total = total + (pe.confidence or 0)
+            n = n + 1
+        end
+    end
+    if n == 0 then return 0 end
+    return total / n
+end
+
+-- Item 2: engagement gate. Returns true only if we have enough information
+-- to commit on the given enemy. Implements BSJ's "2+ missing for 8s = abort".
+function ____exports.ShouldEngage(focus_pid)
+    local pe = _state.perceived_enemy[focus_pid]
+    if pe == nil then return false end
+    if (pe.confidence or 0) < 0.4 then return false end
+    if countMissingEnemies(8) >= 2 then return false end
+    return true
+end
+
+-- Item 3: macro alert level. Drives intent multipliers (offensive intents
+-- dampened in YELLOW/RED, defensive amplified).
+function ____exports.GetMacroAlert()
+    return _state.macro_alert
+end
+
+-- Item 3: alert-derived multiplier. Stays inside [0.85, 1.15] envelope.
+-- For offensive intents, call ApplyMacroAlertMult(desire, "offensive").
+-- For defensive, call with "defensive" — high alert AMPLIFIES defense.
+function ____exports.ApplyMacroAlertMult(desire, side)
+    local map_off = { GREEN = 1.00, YELLOW = 0.95, ORANGE = 0.90, RED = 0.85 }
+    local map_def = { GREEN = 1.00, YELLOW = 1.05, ORANGE = 1.10, RED = 1.15 }
+    local m = (side == "defensive") and (map_def[_state.macro_alert] or 1.0)
+                                     or (map_off[_state.macro_alert] or 1.0)
+    return desire * m
+end
+
+-- Item 3: gank alert info (expected ambush zone if 3+ enemies missing).
+function ____exports.GetGankAlert()
+    if DotaTime() > _state.gank_alert.expires_at then
+        return { severity = 0, target_zone = "none", expires_at = 0 }
+    end
+    return _state.gank_alert
+end
+
+-- Item 8: wave equilibrium. lane in {1,2,3}; returns signed pressure
+-- in [-1, 1] where positive = we're pushing.
+function ____exports.GetLanePressure(lane)
+    return _state.lane_pressure[lane] or 0
 end
 
 -- Returns true if THIS bot is the delegated scout for the given task. Mode
