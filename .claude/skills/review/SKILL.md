@@ -49,20 +49,16 @@ It returns a JSON object with this shape:
 
 ### 2. Handle the no-log case
 
-If the command fails with "No match log found" or similar, the logger isn't enabled. Tell the user:
+If `sim.review` fails with "No console.log found" or returns empty findings with a "no [ABA_LOG] records found" note, two things to check:
 
-> **No match log found.** Enable logging by editing `bots/Customize/general.lua`:
+> **Logger not capturing.** For telemetry to land in `console.log`, two requirements:
 >
-> ```lua
-> Customize.Logger = {
->     Enabled = true,
->     TickInterval = 5.0,
-> }
-> ```
+> 1. Dota 2 launch options must include `-condebug`. In Steam: right-click Dota 2 → Properties → Launch Options → add `-condebug`.
+> 2. `bots/Customize/general.lua` must have `Customize.Logger.Enabled = true` (default after Phase 12).
 >
-> Then play a match. NDJSON will be written to `<OHA>/bots/logs/match_*.ndjson`.
+> Then play a match. Output goes to `<Steam>/steamapps/common/dota 2 beta/game/dota/console.log` and is appended live (mid-match `tail -f` works).
 
-Don't speculate further — wait for the user to come back with a log.
+Don't try to read the in-game console manually — `sim.review` already extracts records via the `[ABA_LOG]` prefix.
 
 ### 3. Present findings
 

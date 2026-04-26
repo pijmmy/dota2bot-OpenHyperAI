@@ -1,30 +1,26 @@
 --[[ Match telemetry logger.
 
-     Writes per-tick + per-event JSON records to a file during a Dota 2
-     custom-lobby match. The output log is machine-readable and consumed
-     by the guineapig sim's diagnostic module (sim.review / sim.diagnose)
-     to automatically surface bad-behavior anti-patterns WITHOUT a human
-     having to watch the game and report.
+     Writes per-tick + per-event records to Dota's console output via
+     `print()`. With Dota launched with `-condebug` in launch options,
+     these lines are captured to:
 
-     Workflow:
-       1. Match starts — logger opens a file at:
-            <Dota>/game/dota/scripts/vscripts/bots/logs/match_<unix>.json
-       2. During match — every TICK_INTERVAL seconds (default 5s) each bot
-          posts a snapshot (intent, focus, mode, position, hp, networth).
-          On key events (ability cast, death, item buy, scout delegation,
-          team-plan transition) records are pushed immediately.
-       3. Match ends — the log is finalized as a JSON array.
+         <Steam>/steamapps/common/dota 2 beta/game/dota/console.log
 
-     The file format is INTENTIONALLY one JSON object per line (NDJSON)
-     so partial logs (game crash, mid-match read) are still parseable.
-     The diagnostic module reads NDJSON, sorts by time, and runs checks.
+     The file is appended in real time so mid-match reads / kill-stream
+     work. Each record is one line:
 
-     Exposed as J.Logger.* via jmz_func.lua. Disabled by default; enable
-     via Customize.Logger.Enabled.
+         [ABA_LOG] {"type":"tick","t":300,"pid":0,"hero":"...","intent":"farm",...}
 
-     IMPORTANT: file I/O from Lua bot scripts is sandboxed by Dota. The
-     `io.open` call may fail silently in some environments. Logger checks
-     for this and degrades gracefully (no-op) if write isn't permitted.
+     A Python-side tailer (sim.review) filters lines starting with the
+     [ABA_LOG] prefix, strips it, parses the JSON.
+
+     IMPORTANT: previous version used `io.open` for direct file writes.
+     Dota's bot script VM sandboxes io.open — calling it crashed bot
+     loading during hero selection. `print()` is the supported logging
+     primitive. This rewrite uses ONLY print(), no file I/O.
+
+     Disabled by default; opt-in via Customize.Logger.Enabled. Exposed
+     as J.Logger.* via jmz_func.lua.
      ]]
 local ____exports = {}
 
@@ -34,26 +30,24 @@ do
     if ok then Customize = m end
 end
 
--- Logger config. Disabled by default — opt-in by adding to Customize.
 local LOGGER_ENABLED = false
-local TICK_INTERVAL = 5.0   -- seconds between snapshots
+local TICK_INTERVAL = 5.0
 if Customize and Customize.Logger then
     LOGGER_ENABLED = Customize.Logger.Enabled or false
     TICK_INTERVAL = Customize.Logger.TickInterval or TICK_INTERVAL
 end
 
-local _file = nil
-local _file_path = nil
+-- Prefix that the Python tailer (sim.review) greps for. Don't change without
+-- updating sim/review.py LOG_PREFIX in lockstep.
+local LOG_PREFIX = "[ABA_LOG] "
+
 local _last_tick_t = -999
 local _initialized = false
-local _failed_to_open = false
 
 -- ============================================================
--- JSON encoding (lua-native, single-line per record)
+-- Inline JSON encoder (no third-party deps; Dota Lua doesn't ship one)
 -- ============================================================
 
--- Lightweight JSON encoder. We don't need full schema — just numbers,
--- strings, bools, nil, and tables. Keys are always strings.
 local function json_escape(s)
     s = string.gsub(s, "\\", "\\\\")
     s = string.gsub(s, '"', '\\"')
@@ -68,13 +62,12 @@ local function json_value(v)
     if t == "nil" then return "null" end
     if t == "boolean" then return v and "true" or "false" end
     if t == "number" then
-        if v ~= v then return "null" end       -- NaN
+        if v ~= v then return "null" end
         if v == math.huge or v == -math.huge then return "null" end
         return tostring(v)
     end
     if t == "string" then return '"' .. json_escape(v) .. '"' end
     if t == "table" then
-        -- Detect array vs object by checking for sequential int keys
         local n = 0
         local is_array = true
         for k in pairs(v) do
@@ -98,59 +91,37 @@ local function json_value(v)
 end
 
 -- ============================================================
--- File handling
--- ============================================================
-
-local function tryOpen()
-    if _failed_to_open then return false end
-    if _file ~= nil then return true end
-    if not LOGGER_ENABLED then return false end
-
-    -- Build a unique path per-match. Dota's bot script sandbox usually
-    -- allows writes to the bots/logs/ directory.
-    local dir = GetScriptDirectory() .. "/logs"
-    local timestamp = math.floor(GameTime() * 1000)
-    _file_path = dir .. "/match_" .. tostring(timestamp) .. ".ndjson"
-    local f, err = io.open(_file_path, "w")
-    if f == nil then
-        _failed_to_open = true
-        print("[aba_logger] Could not open log file: " .. tostring(err))
-        return false
-    end
-    _file = f
-    _initialized = true
-    -- Header record
-    ____exports.Event("session_start", { dota_time = DotaTime(), team = GetTeam() })
-    return true
-end
-
--- ============================================================
 -- Public API
 -- ============================================================
 
--- Write one event record. Cheap; safe to call from any hook.
+local function emit(rec)
+    -- Single point of failure: print() can't crash but it can be no-op'd
+    -- without -condebug. If the user has -condebug, lines append to
+    -- console.log immediately. If not, lines still go to the in-game
+    -- developer console (toggleable with backtick in-game).
+    local ok, encoded = pcall(json_value, rec)
+    if not ok then return end
+    print(LOG_PREFIX .. encoded)
+end
+
 function ____exports.Event(kind, fields)
     if not LOGGER_ENABLED then return end
-    if not tryOpen() then return end
-
-    local rec = {
-        type = kind,
-        t = DotaTime(),
-        gt = GameTime(),
-    }
+    if not _initialized then
+        _initialized = true
+        emit({
+            type = "session_start",
+            t = DotaTime(),
+            gt = GameTime(),
+            team = GetTeam(),
+        })
+    end
+    local rec = { type = kind, t = DotaTime(), gt = GameTime() }
     if type(fields) == "table" then
         for k, v in pairs(fields) do rec[k] = v end
     end
-    local line = json_value(rec) .. "\n"
-    local ok, err = pcall(function() _file:write(line); _file:flush() end)
-    if not ok then
-        _failed_to_open = true
-        print("[aba_logger] Write failed: " .. tostring(err))
-    end
+    emit(rec)
 end
 
--- Snapshot bot state. Throttled to TICK_INTERVAL — call once per tick from
--- bot_generic.lua / mode_*.lua and the throttle handles the rate.
 function ____exports.MaybeTick(bot)
     if not LOGGER_ENABLED then return end
     if bot == nil then return end
@@ -167,7 +138,6 @@ function ____exports.MaybeTick(bot)
     local okMD, mdesire = pcall(function() return bot:GetActiveModeDesire() end)
     local okLoc, loc = pcall(function() return bot:GetLocation() end)
 
-    -- Pull team-plan intent if loaded
     local intent = nil
     local tp_ok, jmz = pcall(require, GetScriptDirectory().."/FunLib/jmz_func")
     if tp_ok and jmz and jmz.TeamPlan and jmz.TeamPlan.GetCurrentPlan then
@@ -189,7 +159,6 @@ function ____exports.MaybeTick(bot)
     })
 end
 
--- Specific event helpers (cleaner call sites than passing strings around)
 function ____exports.AbilityCast(bot, abilityName, targetName)
     if not LOGGER_ENABLED then return end
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
@@ -203,6 +172,7 @@ function ____exports.AbilityCast(bot, abilityName, targetName)
 end
 
 function ____exports.IntentTransition(prev_intent, new_intent, reason)
+    if not LOGGER_ENABLED then return end
     ____exports.Event("intent_transition", {
         prev = prev_intent,
         next = new_intent,
@@ -211,13 +181,12 @@ function ____exports.IntentTransition(prev_intent, new_intent, reason)
 end
 
 function ____exports.ScoutDelegated(task, owner_pid)
+    if not LOGGER_ENABLED then return end
     ____exports.Event("scout_delegated", { task = task, owner_pid = owner_pid })
 end
 
 function ____exports.MinionStuck(bot, minionName, ticks)
-    -- Logged when a minion has been idle (no attack target, near bot) for
-    -- N consecutive ticks. Used for the "forged spirit standing still"
-    -- diagnostic class.
+    if not LOGGER_ENABLED then return end
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
     ____exports.Event("minion_stuck", {
         pid = okPid and pid or -1,
@@ -227,14 +196,13 @@ function ____exports.MinionStuck(bot, minionName, ticks)
 end
 
 -- ============================================================
--- Kill stream — polls every bot's GetKills/GetDeaths each tick and emits
--- a kill_event whenever the counter increments. Live; flushed immediately
--- so the log reflects kills the moment they happen (no end-of-match wait).
+-- Kill-stream — polls every bot's GetKills/GetDeaths each tick.
+-- Emits records the moment a counter increments so log shows kills live.
 -- ============================================================
 
-local _last_kills = {}    -- pid -> last seen kill count
-local _last_deaths = {}   -- pid -> last seen death count
-local _last_alive = {}    -- pid -> last alive bool
+local _last_kills = {}
+local _last_deaths = {}
+local _last_alive = {}
 
 function ____exports.PollKillStream(bot)
     if not LOGGER_ENABLED then return end
@@ -247,7 +215,6 @@ function ____exports.PollKillStream(bot)
     local okA, alive = pcall(function() return bot:IsAlive() end)
     local okL, loc = pcall(function() return bot:GetLocation() end)
 
-    -- Kill increment
     if okK and kills ~= nil then
         local prev = _last_kills[pid] or kills
         if kills > prev then
@@ -261,7 +228,6 @@ function ____exports.PollKillStream(bot)
         _last_kills[pid] = kills
     end
 
-    -- Death increment
     if okD and deaths ~= nil then
         local prev = _last_deaths[pid] or deaths
         if deaths > prev then
@@ -275,7 +241,6 @@ function ____exports.PollKillStream(bot)
         _last_deaths[pid] = deaths
     end
 
-    -- Alive transitions (catches respawns)
     if okA then
         if _last_alive[pid] == false and alive == true then
             ____exports.Event("respawn", { pid = pid, hero = okN and hero or "?" })
@@ -284,28 +249,9 @@ function ____exports.PollKillStream(bot)
     end
 end
 
--- Flush hint: NDJSON is already flushed after every write, but we expose
--- this for explicit "save now" calls if the bot wants belt-and-suspenders.
-function ____exports.Flush()
-    if _file ~= nil then
-        pcall(function() _file:flush() end)
-    end
-end
-
-function ____exports.Close()
-    if _file ~= nil then
-        ____exports.Event("session_end", { dota_time = DotaTime() })
-        local ok = pcall(function() _file:close() end)
-        _file = nil
-    end
-end
-
-function ____exports.IsEnabled()
-    return LOGGER_ENABLED
-end
-
-function ____exports.GetPath()
-    return _file_path
-end
+function ____exports.IsEnabled() return LOGGER_ENABLED end
+function ____exports.Flush() end   -- no-op: print() already auto-flushes
+function ____exports.Close() end   -- no-op: console.log is managed by Dota
+function ____exports.GetPath() return "console.log (via -condebug)" end
 
 return ____exports
