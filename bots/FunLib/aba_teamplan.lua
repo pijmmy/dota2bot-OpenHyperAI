@@ -860,31 +860,53 @@ local function maybeSwapIntent(plan, bot)
 end
 
 function ____exports.MaybeRecompute(bot)
+    -- This function is on the hot path — every mode's ModulateDesire calls it.
+    -- If it throws, mode GetDesire's return value is nil, which Dota interprets
+    -- as no-mode-active across ALL modes, asserting m_pActiveBotMode == NULL
+    -- and crashing. So every step here is wrapped defensively.
     if bot == nil then return currentPlan end
     local now = DotaTime()
     if now - currentPlan.lastComputeTime < TEAMPLAN_RECOMPUTE_INTERVAL then
         return currentPlan
     end
     local ok, plan = pcall(computePlan, bot)
-    if not ok or plan == nil then return currentPlan end
-    -- Apply mixed-strategy ε-noise.
-    plan = maybeSwapIntent(plan, bot)
-    -- Phase 11 Item 4: tick the convex commitment scalar for the new intent.
-    local okC, Commit = pcall(require, GetScriptDirectory().."/FunLib/aba_commitment")
-    if okC and Commit and Commit.Tick then
-        Commit.Tick(plan.intent)
-        if Commit.ShouldAbort and Commit.ShouldAbort(plan.intent) then
-            -- Hard abort: replace plan with regroup, reset progress.
-            Commit.Reset(plan.intent)
-            plan = {
-                intent = "regroup",
-                lane = nil, location = nil,
-                validUntil = now + 6,
-                lastComputeTime = now,
-                authorID = plan.authorID,
-                reason = "abort: " .. plan.intent,
-            }
+    if not ok or plan == nil or type(plan) ~= "table" then return currentPlan end
+
+    -- Apply mixed-strategy ε-noise. Pcall-guarded so a swap bug can't tank
+    -- the whole desire stack.
+    local okSwap, swapped = pcall(maybeSwapIntent, plan, bot)
+    if okSwap and type(swapped) == "table" and swapped.intent ~= nil then
+        plan = swapped
+    end
+
+    -- Phase 11 Item 4: convex commitment + abort triggers. Pcall-guarded
+    -- per-call. Any failure here just leaves the plan as-is; we never
+    -- propagate an exception out of MaybeRecompute.
+    pcall(function()
+        local okC, Commit = pcall(require, GetScriptDirectory().."/FunLib/aba_commitment")
+        if not okC or not Commit then return end
+        if Commit.Tick then pcall(Commit.Tick, plan.intent) end
+        if Commit.ShouldAbort then
+            local okA, shouldAbort = pcall(Commit.ShouldAbort, plan.intent)
+            if okA and shouldAbort then
+                pcall(Commit.Reset, plan.intent)
+                plan = {
+                    intent = "regroup",
+                    lane = nil, location = nil,
+                    validUntil = now + 6,
+                    lastComputeTime = now,
+                    authorID = plan.authorID,
+                    reason = "abort: " .. tostring(plan.intent),
+                }
+            end
         end
+    end)
+
+    -- Sanity-check the plan shape before storing — a malformed plan
+    -- (missing intent / non-table) would propagate via GetCurrentPlan
+    -- and break every downstream ModulateDesire call next tick.
+    if type(plan) ~= "table" or plan.intent == nil then
+        return currentPlan
     end
     plan.lastComputeTime = now
     plan.validUntil = now + PLAN_TTL

@@ -7,9 +7,7 @@ local BotBuild = dofile(GetScriptDirectory() .. "/BotLib/" .. string.gsub(botNam
 
 -- Telemetry logger: throttled snapshots + kill-stream polling. Disabled
 -- unless Customize.Logger.Enabled. Wrapped in nested pcall so any error
--- inside the logger CANNOT crash bot loading or per-tick execution —
--- previous version crashed Dota during hero selection because io.open()
--- is sandboxed.
+-- inside the logger CANNOT crash bot loading or per-tick execution.
 pcall(function()
     local _ok_logger, _Logger = pcall(require, GetScriptDirectory()..'/FunLib/aba_logger')
     if _ok_logger and _Logger and _Logger.IsEnabled and _Logger.IsEnabled() then

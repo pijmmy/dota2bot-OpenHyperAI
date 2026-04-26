@@ -285,7 +285,13 @@ end
 -- Multiply a mode desire by the bot's personality factor. Self-updates tilt.
 -- Also applies team-plan bias if the team plan module is available.
 -- Zero/negative desires pass through unchanged (gates stay as gates).
-function ____exports.ModulateDesire(bot, desire, mode)
+-- Internal implementation; the public ModulateDesire wraps this in pcall
+-- so any error produces a sane fallback value rather than a nil return.
+-- Background: every mode_*.lua's GetDesire returns ModulateDesire(...).
+-- A nil return from GetDesire on EVERY mode produces Dota's
+-- "Null bot mode for unit X" assertion crash. So this function MUST
+-- always return a number.
+local function _modulateDesireImpl(bot, desire, mode)
     if bot == nil or desire == nil then return desire end
     if type(desire) ~= "number" then return desire end
     if desire <= 0 then return desire end
@@ -299,12 +305,18 @@ function ____exports.ModulateDesire(bot, desire, mode)
 
     local p = ____exports.GetEffective(bot)
 
-    -- Apply team-plan bias first (team strategy layer)
+    -- Apply team-plan bias first (team strategy layer). Pcall-guarded
+    -- because tp.MaybeRecompute is on every mode's hot path — if it ever
+    -- throws (e.g. due to a bug in the convex-commitment / mixed-strategy
+    -- code), every mode's GetDesire returns no value, Dota assertion-fails
+    -- with "Null bot mode for unit X" and the game crashes.
     local tp = getTeamPlan()
     if tp ~= nil then
-        tp.MaybeRecompute(bot)
-        local planMult = tp.GetPlanBias(bot, mode, p.teamSpirit)
-        desire = desire * planMult
+        pcall(tp.MaybeRecompute, bot)
+        local okBias, planMult = pcall(tp.GetPlanBias, bot, mode, p.teamSpirit)
+        if okBias and type(planMult) == "number" then
+            desire = desire * planMult
+        end
     end
 
     -- Then personality multiplier (individual variance on top of team strategy)
@@ -397,6 +409,18 @@ function ____exports.ModulateDesire(bot, desire, mode)
     end
 
     return desire
+end
+
+-- Public ModulateDesire: guarantees a numeric return value even if the
+-- impl throws. A nil return cascades into Dota's "Null bot mode" assert
+-- and a hard game crash.
+function ____exports.ModulateDesire(bot, desire, mode)
+    local ok, result = pcall(_modulateDesireImpl, bot, desire, mode)
+    if ok and type(result) == "number" then return result end
+    -- Fallback: pass desire through unchanged if anything fails. Better
+    -- to lose modulation for one tick than to crash the engine.
+    if type(desire) == "number" then return desire end
+    return 0
 end
 
 function ____exports.GetMultiplier(bot, mode)
