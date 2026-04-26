@@ -151,11 +151,7 @@ Customize.Fretbots_AutoEnable = true
 -- Set Enabled = true to start recording. Default false to keep
 -- custom-lobby runs lean.
 Customize.Logger = {
-    -- Enabled. Logger uses print() which writes to Dota's console.
-    -- For lines to be captured to disk, add `-condebug` to Dota's
-    -- Steam launch options. Output: <Steam>/.../game/dota/console.log
-    -- Lines prefixed with [ABA_LOG] — sim.review filters on that prefix.
-    Enabled = true,
+    Enabled = false,           -- DISABLED until crash root-caused
     TickInterval = 5.0,
 }
 
