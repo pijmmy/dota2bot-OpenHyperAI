@@ -418,7 +418,11 @@ local TACTIC_TIMEOUT = {
 
 local TACTIC_COOLDOWN = {
     commit_kill = 12,        -- 12s cooldown after timeout
-    contest_rosh = 25,       -- longer rest before re-attempting rosh
+    contest_rosh = 180,      -- 3-min cooldown — Phase 14: was 25s, caused
+                              -- both teams to spam rosh attempts every minute.
+                              -- Real games have rosh attempted maybe once
+                              -- every 8-10 min on average; this cooldown
+                              -- enforces that pacing even when gates re-open.
     contest_tormentor = 20,
     lane_gank = 8,
     save_ally = 6,
@@ -626,25 +630,52 @@ local function computePlan(bot)
         end
     end
 
-    -- 3. CONTEST_ROSH: rosh alive, past early game, numbers favorable.
-    -- Phase 4: use pro_macro data for the time gate (was hardcoded 12*60).
-    -- Falls back to 12 min if no data loaded.
-    local roshGateSec = 12 * 60
+    -- 3. CONTEST_ROSH: tightened gate — Phase 14 fix.
+    --
+    -- Previous gate (now > 12min, rosh alive, allies >= 3, allies >= enemies)
+    -- fired on most mid-game ticks because all four conditions were trivially
+    -- satisfied. Both teams spammed contest_rosh every 25-35s for the rest of
+    -- the game, ruining gameplay. (User report: "Both teams obsessed with
+    -- roshan and ruin gameplay.")
+    --
+    -- New gate requires HARD ADVANTAGE before committing — actual numbers
+    -- advantage AND a real trigger reason (recent kill / aegis incoming /
+    -- big NW lead). Fires roughly once every 5-10 minutes when conditions
+    -- align, not constantly.
+    local roshGateSec = 15 * 60   -- not before minute 15 unless triggered
     local jmzM = jmz()
     if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
         local pm = jmzM.DraftStrategy.GetProMacro()
         if pm and pm.first_rosh_typical_sec and pm.first_rosh_typical_sec > 0 then
-            -- Pros contest first rosh around 15 min; use 80% of that as our "can start thinking about it" gate
-            roshGateSec = math.floor(pm.first_rosh_typical_sec * 0.8)
+            roshGateSec = math.floor(pm.first_rosh_typical_sec)  -- pro median, not 0.8x
         end
     end
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
     if okRosh and roshAlive and now > roshGateSec then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
-        if aliveAllies >= thresholds.roshAllyThreshold and aliveAllies >= aliveEnemies then
+
+        -- Hard advantage required: 4+ allies AND at least 2 more alive than
+        -- enemies (i.e. enemy team has 2+ dead heroes recently). This means
+        -- contest_rosh only fires after a successful teamfight, not "we
+        -- happen to be alive at the same time as them."
+        local hasNumbersAdvantage = (aliveAllies >= 4) and (aliveAllies >= aliveEnemies + 2)
+
+        -- OR: massive networth lead (>10k) and full team alive — we're
+        -- snowballing, take rosh as a finisher.
+        local hasNWLead = false
+        if jmzM and jmzM.GetInventoryNetworth then
+            local okNW, myNW, enemyNW = pcall(function() return jmzM.GetInventoryNetworth() end)
+            if okNW and type(myNW) == "number" and type(enemyNW) == "number" then
+                hasNWLead = (aliveAllies == 5) and ((myNW - enemyNW) >= 10000)
+            end
+        end
+
+        if hasNumbersAdvantage or hasNWLead then
             local roshLoc = jmz().GetCurrentRoshanLocation and jmz().GetCurrentRoshanLocation() or nil
-            local reason = "rosh up, allies=" .. tostring(aliveAllies) .. "/" .. tostring(thresholds.roshAllyThreshold)
+            local reason = hasNumbersAdvantage
+                and ("rosh: numbers " .. tostring(aliveAllies) .. "v" .. tostring(aliveEnemies))
+                or ("rosh: nw_lead 10k+")
             return freshPlan("contest_rosh", nil, roshLoc, reason)
         end
     end
