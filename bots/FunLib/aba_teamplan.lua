@@ -487,13 +487,30 @@ local function freshPlan(intent, lane, loc, reason)
 end
 
 -- Compute a group location for late-game regrouping.
--- Priority: closest threatened ally rax -> team centroid -> ancient.
+-- Phase 14 fix: was returning the team's Ancient (= fountain) which made
+-- late_game_group glue bots to the fountain forever. Now returns the
+-- team's frontmost own tower — wherever the actual battle line is.
+-- Falls through tiers from T1 -> T2 -> T3 -> ancient (only as last resort).
 local function computeGroupLocation(team)
-    local J = jmz()
-    -- If we have a rax under attack, group there
+    local lanes = { LANE_TOP, LANE_MID, LANE_BOT }
+    -- Iterate tower tiers from forward to back. Pick the first tier where
+    -- ANY of our lanes still has that tier alive — that's the front line.
+    local tier_lists = {
+        { TOWER_TOP_1, TOWER_MID_1, TOWER_BOT_1 },
+        { TOWER_TOP_2, TOWER_MID_2, TOWER_BOT_2 },
+        { TOWER_TOP_3, TOWER_MID_3, TOWER_BOT_3 },
+    }
+    for _, tier in ipairs(tier_lists) do
+        for _, t_id in ipairs(tier) do
+            local t = GetTower(team, t_id)
+            if t ~= nil and not t:IsNull() and t:IsAlive() then
+                return t:GetLocation()
+            end
+        end
+    end
+    -- All outer towers gone — group at ancient as last-resort defensive stance
     local ancient = GetAncient(team)
     if ancient == nil then return nil end
-    -- Use our ancient's location as the group anchor for defensive stance
     return ancient:GetLocation()
 end
 
@@ -713,25 +730,12 @@ local function computePlan(bot)
         end
     end
 
-    -- 3.9 LATE_GAME_GROUP (elevated priority): past the late-game gate,
-    -- grouping defensively at high ground trumps split-map pushing. Without
-    -- this block before push_lane, bots kept firing push_lane every recompute
-    -- in the 25min+ window and never consolidated — sim harness showed 0
-    -- late_game_group fires in 40-min matches. Real pro macro: once past p25
-    -- match duration, teams converge at high ground to protect the core.
-    local lateGameGateSec = 25 * 60
-    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
-        local pm = jmzM.DraftStrategy.GetProMacro()
-        if pm and pm.match_duration_p25 and pm.match_duration_p25 > 0 then
-            lateGameGateSec = pm.match_duration_p25
-        end
-    end
-    if now > lateGameGateSec then
-        local groupLoc = computeGroupLocation(team)
-        if groupLoc ~= nil then
-            return freshPlan("late_game_group", nil, groupLoc, "late game: group at high ground")
-        end
-    end
+    -- (Phase 14: late_game_group DEMOTED back below push_lane — see section 5
+    -- after push. Phase 9's elevated priority was a workaround for push_lane
+    -- dominating, but push_lane now has its own TACTIC_TIMEOUT/COOLDOWN. With
+    -- late_game_group running BEFORE push_lane and its location set to the
+    -- ancient (= fountain), bots got glued to the fountain past minute 25.
+    -- User report: "late game both sides just hover near the fountain".)
 
     -- 4. PUSH_LANE: weakest enemy lane + we have people (threshold adapts to pressure).
     -- Phase 4: gate by a min game time from pro macro data. Pro first T1 typically
@@ -797,7 +801,25 @@ local function computePlan(bot)
         end
     end
 
-    -- (late_game_group moved above push_lane — see 3.9)
+    -- 5.7 LATE_GAME_GROUP (fallback only — Phase 14): if past p25 match
+    -- duration AND no higher-priority intent fired, group at the front-line
+    -- tower. This is a fallback, NOT a primary mode — push_lane and
+    -- smoke_gank above run first. The location is the team's frontmost
+    -- living tower (forward HG line), NOT the ancient. Glueing bots to
+    -- the fountain late-game is the bug we just fixed.
+    local lateGameGateSec = 25 * 60
+    if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
+        local pm = jmzM.DraftStrategy.GetProMacro()
+        if pm and pm.match_duration_p25 and pm.match_duration_p25 > 0 then
+            lateGameGateSec = pm.match_duration_p25
+        end
+    end
+    if now > lateGameGateSec then
+        local groupLoc = computeGroupLocation(team)
+        if groupLoc ~= nil then
+            return freshPlan("late_game_group", nil, groupLoc, "late game: hold front-line tower")
+        end
+    end
 
     -- 6. REGROUP
     if teamIsWeak(team) then
