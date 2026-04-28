@@ -546,12 +546,29 @@ local function computePlan(bot)
         if ok and t ~= nil then thresholds = t end
     end
 
-    -- 1. DEFEND_BASE: enemies near our Ancient
+    -- 1. DEFEND_BASE: ancient under REAL threat — Phase 14 fix.
+    --
+    -- Previous gate fired on 1+ enemy within 2500u. In late game both teams
+    -- routinely have a scout/split-pusher near the enemy base, which
+    -- triggered defend_base for the OPPOSITE team. Net result: both teams
+    -- panic-recall to their own ancient and hover at the fountain. User
+    -- report: "late game both sides just hover near the fountain."
+    --
+    -- New gate requires evidence of an ACTUAL coordinated threat:
+    --   (a) 2+ enemies within 1500u (coordinated push, not a lone scout), OR
+    --   (b) ancient taking damage in the last 8 seconds, OR
+    --   (c) ancient HP below 80% (under real attack)
     local ourAncient = GetAncient(team)
-    if ourAncient ~= nil then
-        local enemiesAtAncient = countEnemyHeroesNear(ourAncient:GetLocation(), 2500)
-        if enemiesAtAncient >= 1 then
-            return freshPlan("defend_base", nil, ourAncient:GetLocation(), "enemies near ancient")
+    if ourAncient ~= nil and not ourAncient:IsNull() then
+        local hpPct = ourAncient:GetHealth() / math.max(1, ourAncient:GetMaxHealth())
+        local okDmg, recentDmg = pcall(function() return ourAncient:WasRecentlyDamagedByAnyHero(8.0) end)
+        local recentlyDamaged = (okDmg and recentDmg) or false
+        local enemiesAtAncient = countEnemyHeroesNear(ourAncient:GetLocation(), 1500)
+
+        if enemiesAtAncient >= 2 or recentlyDamaged or hpPct < 0.80 then
+            local reason = string.format("real threat: enemies=%d hp=%.0f%% dmg=%s",
+                enemiesAtAncient, hpPct * 100, tostring(recentlyDamaged))
+            return freshPlan("defend_base", nil, ourAncient:GetLocation(), reason)
         end
     end
 
