@@ -624,6 +624,15 @@ local function computePlan(bot)
         end
     end
 
+    -- Hoisted: TeamfightReadiness must be computed BEFORE commit_kill so the
+    -- readiness gate at the engageOK check sees real values. Otherwise it
+    -- reads the init `readiness = 1.0` and the gate is a no-op.
+    local jmzM = jmz()
+    if jmzM and jmzM.TeamState and jmzM.TeamState.TeamfightReadiness then
+        local okReady, ready = pcall(function() return jmzM.TeamState.TeamfightReadiness() end)
+        if okReady and type(ready) == "number" then readiness = ready end
+    end
+
     -- 2.5 COMMIT_KILL: focus target exists + ≥ threshold allies near focus
     -- (threshold adapts to pressure and focus quality — a very high-score
     -- focus lowers the threshold by 1, so a juicy isolated-low-HP core
@@ -701,7 +710,6 @@ local function computePlan(bot)
     -- big NW lead). Fires roughly once every 5-10 minutes when conditions
     -- align, not constantly.
     local roshGateSec = 15 * 60   -- not before minute 15 unless triggered
-    local jmzM = jmz()
     if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
         local pm = jmzM.DraftStrategy.GetProMacro()
         if pm and pm.first_rosh_typical_sec and pm.first_rosh_typical_sec > 0 then
@@ -709,10 +717,6 @@ local function computePlan(bot)
         end
     end
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
-    if jmzM and jmzM.TeamState and jmzM.TeamState.TeamfightReadiness then
-        local okReady, ready = pcall(function() return jmzM.TeamState.TeamfightReadiness() end)
-        if okReady and type(ready) == "number" then readiness = ready end
-    end
     if okRosh and roshAlive and now > roshGateSec then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
@@ -905,7 +909,9 @@ local function computePlan(bot)
         if flavor == "high_ground_rush" then
             return freshPlan("push_lane", nil, nil, "late flavor: high_ground_rush")
         elseif flavor == "aegis_stall" then
-            return freshPlan("contest_rosh", nil, nil, "late flavor: aegis_stall")
+            -- Phase 14: aegis_stall must NOT bypass the rosh gate above.
+            -- Stall semantics = group up & wait, not "go to roshpit again".
+            return freshPlan("regroup", nil, nil, "late flavor: aegis_stall")
         elseif flavor == "split_and_rax" then
             return freshPlan("smoke_gank", nil, nil, "late flavor: split_and_rax")
         end
