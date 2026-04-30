@@ -51,16 +51,16 @@ local TILT_PER_KILL_REDUCTION = 0.08
 -- Each entry: {trait, atZero, atOne} — linear interp [0..1] -> [atZero..atOne].
 local MODE_MODIFIERS = {
     farm = {
-        { trait = "greed", atZero = 0.75, atOne = 1.3 },
+        { trait = "greed", atZero = 0.70, atOne = 1.35 },
         { trait = "teamSpirit", atZero = 1.1, atOne = 0.85 },
     },
     roam = {
-        { trait = "aggression", atZero = 0.6, atOne = 1.35 },
+        { trait = "aggression", atZero = 0.55, atOne = 1.40 },
         { trait = "greed", atZero = 1.1, atOne = 0.8 },
         { trait = "independence", atZero = 0.85, atOne = 1.15 },
     },
     team_roam = {
-        { trait = "aggression", atZero = 0.7, atOne = 1.25 },
+        { trait = "aggression", atZero = 0.65, atOne = 1.30 },
         { trait = "teamSpirit", atZero = 0.55, atOne = 1.3 },
         { trait = "independence", atZero = 1.2, atOne = 0.7 },
     },
@@ -251,21 +251,21 @@ end
 -- (frees them for roam / ward / stack).
 -- Bumped after user feedback "carries should get more farm".
 local FARM_ROLE_SCALE = {
-    [1] = 1.35,    -- was 1.20
-    [2] = 1.20,    -- was 1.10
-    [3] = 0.90,    -- was 0.85
-    [4] = 0.45,    -- was 0.50
-    [5] = 0.40,    -- was 0.45
+    [1] = 1.20,
+    [2] = 1.05,
+    [3] = 0.95,
+    [4] = 0.75,
+    [5] = 0.70,
 }
 
 -- Push/team_roam can also be slightly role-weighted: supports lead initiations,
 -- cores follow up. But we keep it mild.
 local ROAM_ROLE_SCALE = {
-    [1] = 0.90,
-    [2] = 1.00,
+    [1] = 0.85,
+    [2] = 1.15,
     [3] = 1.00,
-    [4] = 1.15,
-    [5] = 1.10,
+    [4] = 1.30,
+    [5] = 1.20,
 }
 
 local function applyRoleScale(mode, bot, desire)

@@ -517,6 +517,8 @@ end
 -- Opening flavor: rolled once per match to vary early-game strategy.
 -- Stored at module scope so every computePlan call sees the same roll.
 local _openingFlavor = nil
+local _midgameFlavor = nil
+local _lateGameFlavor = nil
 local function getOpeningFlavor()
     if _openingFlavor ~= nil then return _openingFlavor end
     local roll = RandomInt(1, 100)
@@ -528,10 +530,32 @@ local function getOpeningFlavor()
     return _openingFlavor
 end
 
+local function getMidgameFlavor(now)
+    if _midgameFlavor ~= nil then return _midgameFlavor end
+    if now < 12 * 60 then return nil end
+    local roll = RandomInt(1, 100)
+    if roll <= 25 then _midgameFlavor = "fast_siege"
+    elseif roll <= 50 then _midgameFlavor = "pickoff_focus"
+    elseif roll <= 75 then _midgameFlavor = "split_farm"
+    else _midgameFlavor = "objective_dance" end
+    return _midgameFlavor
+end
+
+local function getLateGameFlavor(now)
+    if _lateGameFlavor ~= nil then return _lateGameFlavor end
+    if now < 28 * 60 then return nil end
+    local roll = RandomInt(1, 100)
+    if roll <= 34 then _lateGameFlavor = "high_ground_rush"
+    elseif roll <= 67 then _lateGameFlavor = "aegis_stall"
+    else _lateGameFlavor = "split_and_rax" end
+    return _lateGameFlavor
+end
+
 local function computePlan(bot)
     local team = GetTeam()
     local enemyTeam = GetOpposingTeam()
     local now = DotaTime()
+    local readiness = 1.0
 
     -- Pull adaptive thresholds from game theory if available (falls back to defaults).
     local thresholds = {
@@ -642,7 +666,7 @@ local function computePlan(bot)
                     if jmzM_for_engage and jmzM_for_engage.TeamState and target_pid ~= nil then
                         engageOK = jmzM_for_engage.TeamState.ShouldEngage(target_pid)
                     end
-                    if engageOK then
+                    if engageOK and readiness > 0.50 then
                         return freshPlan("commit_kill", nil, focusLoc,
                             "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(effThreshold)
                             .. " score=" .. string.format("%.2f", target.score or 0))
@@ -685,6 +709,10 @@ local function computePlan(bot)
         end
     end
     local okRosh, roshAlive = pcall(function() return jmz().IsRoshanAlive() end)
+    if jmzM and jmzM.TeamState and jmzM.TeamState.TeamfightReadiness then
+        local okReady, ready = pcall(function() return jmzM.TeamState.TeamfightReadiness() end)
+        if okReady and type(ready) == "number" then readiness = ready end
+    end
     if okRosh and roshAlive and now > roshGateSec then
         local aliveAllies = countAliveTeamHeroes(team)
         local aliveEnemies = countAliveTeamHeroes(enemyTeam)
@@ -705,7 +733,7 @@ local function computePlan(bot)
             end
         end
 
-        if hasNumbersAdvantage or hasNWLead then
+        if (hasNumbersAdvantage or hasNWLead) and readiness > 0.50 then
             local roshLoc = jmz().GetCurrentRoshanLocation and jmz().GetCurrentRoshanLocation() or nil
             local reason = hasNumbersAdvantage
                 and ("rosh: numbers " .. tostring(aliveAllies) .. "v" .. tostring(aliveEnemies))
@@ -849,11 +877,7 @@ local function computePlan(bot)
     if now < 4 * 60 then
         local flavor = getOpeningFlavor()
         if flavor == "lotus_rush" then
-            -- Bias toward lotus pickup even if normal gate wouldn't fire yet
-            local lotusReady, lotusLoc = isLotusContestable(team, now)
-            if lotusReady then
-                return freshPlan("contest_lotus", nil, lotusLoc, "opening: lotus_rush")
-            end
+            return freshPlan("lane_gank", nil, nil, "opening: lotus_rush->support_rotation")
         elseif flavor == "aggro_roam" or flavor == "smoke_gank_early" then
             -- Bias toward team_roam even without a low-HP focus (opportunistic rotations)
             return freshPlan("smoke_gank", nil, nil, "opening: " .. flavor)
@@ -861,6 +885,30 @@ local function computePlan(bot)
             return freshPlan("regroup", nil, nil, "opening: deward_scout (ward coverage)")
         end
         -- passive_lane falls through to farm — default safe laning
+    end
+
+    if now >= 12 * 60 and now <= 24 * 60 then
+        local flavor = getMidgameFlavor(now)
+        if flavor == "fast_siege" then
+            return freshPlan("push_lane", nil, nil, "mid flavor: fast_siege")
+        elseif flavor == "pickoff_focus" then
+            return freshPlan("smoke_gank", nil, nil, "mid flavor: pickoff_focus")
+        elseif flavor == "split_farm" then
+            return freshPlan("farm", nil, nil, "mid flavor: split_farm")
+        elseif flavor == "objective_dance" then
+            return freshPlan("regroup", nil, nil, "mid flavor: objective_dance")
+        end
+    end
+
+    if now >= 28 * 60 then
+        local flavor = getLateGameFlavor(now)
+        if flavor == "high_ground_rush" then
+            return freshPlan("push_lane", nil, nil, "late flavor: high_ground_rush")
+        elseif flavor == "aegis_stall" then
+            return freshPlan("contest_rosh", nil, nil, "late flavor: aegis_stall")
+        elseif flavor == "split_and_rax" then
+            return freshPlan("smoke_gank", nil, nil, "late flavor: split_and_rax")
+        end
     end
 
     -- 7. FARM default
