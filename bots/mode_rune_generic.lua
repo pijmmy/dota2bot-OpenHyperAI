@@ -152,9 +152,14 @@ function GetDesireInner()
 
 		rune.location, rune.distance = X.GetBestRune()
 
-		-- Pre-game: move toward rune with moderate desire
+		-- Pre-game: only supports (pos 4/5) walk for the bounty.
+		-- Old behavior was MODERATE for ALL bots → 5-man clump at the closer
+		-- bounty/ruins each game. Cores stay on lane creep.
 		if DotaTime() < 0 and not bot:WasRecentlyDamagedByAnyHero(10.0) then
-			return BOT_MODE_DESIRE_MODERATE
+			if botPos and botPos >= 4 then
+				return BOT_MODE_DESIRE_MODERATE
+			end
+			return BOT_MODE_DESIRE_NONE
 		end
 
 		if rune.location ~= -1 then

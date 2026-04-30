@@ -952,14 +952,16 @@ local function InitPickScheduleOnce()
 		return
 	end
 
-	-- Tweak these three to taste:
-	local base  = GameTime() + 3          -- when the *first* bot may pick
-	local step  = GetTeam() * 3           -- spacing between slots
-	local jitter_min, jitter_max = 1, 3   -- small variability per slot
+	-- This function only runs once both teams' humans have locked their pick
+	-- (gated above by IsHumanNotReady). Once we're here, bots should snap to
+	-- their picks — no "organic feel" delay. Old behavior spread 5 picks across
+	-- 30-45s after the user, which felt like the bots were stalling.
+	local base = GameTime() + 0.4        -- first bot ~0.4s after init
+	local step = 0.5                     -- tight spacing
+	local jitter_min, jitter_max = 0.1, 0.4
 
 	local teamPlayers = GetTeamPlayers(GetTeam(), true)
 	for slot = 1, #teamPlayers do
-		-- tiny jitter per-slot for a more organic feel
 		local jitter = RandomFloat(jitter_min, jitter_max)
 		PickSchedule.NextPickAt[slot] = base + (slot - 1) * step + jitter
 	end

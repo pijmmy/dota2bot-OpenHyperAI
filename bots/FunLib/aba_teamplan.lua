@@ -456,6 +456,60 @@ local function trackIntent(intent)
 end
 
 -- ============================================================
+-- Plan commitment.
+--
+-- commitment ∈ [0, 1] tells GetPlanBias how authoritatively to enforce
+-- the plan. Low commitment = advisory (bots can ignore via their own
+-- desires + teamSpirit dampener — current behavior). High commitment
+-- = the bias range widens beyond the [0.5, 1.3] envelope AND drops the
+-- teamSpirit dampener, so contradicting modes get hammered to ~0.2x and
+-- aligned modes get pushed to ~1.6x. That makes high-stakes plans
+-- (defend_base, push during a winning state, save_ally) actually
+-- coordinate the team instead of being one factor among many.
+--
+-- Push-then-retreat fix: push_lane commitment grows with age. After 25s
+-- in push, commitment is high enough that the missing-enemy regroup
+-- intent at line ~846 can't actually pull bots off the push — their
+-- push mode dominates regardless.
+-- ============================================================
+
+local INTENT_BASE_COMMITMENT = {
+    defend_base       = 1.00,
+    save_ally         = 0.95,
+    commit_kill       = 0.85,
+    contest_rosh      = 0.85,
+    contest_tormentor = 0.80,
+    smoke_gank        = 0.65,
+    push_lane         = 0.50,   -- starts advisory; ramps via age boost below
+    defend_lane       = 0.75,
+    lane_gank         = 0.65,
+    contest_lotus     = 0.40,
+    late_game_group   = 0.55,
+    regroup           = 0.45,
+    farm              = 0.30,   -- always advisory
+}
+
+-- Sticky intents: longer time spent in this intent → stronger commitment.
+-- Stops the team flipping plans every 2s during a coordinated maneuver.
+local STICKY_INTENTS = {
+    push_lane = true, contest_rosh = true, smoke_gank = true,
+    late_game_group = true, commit_kill = true, defend_lane = true,
+}
+
+local function computeCommitment(intent, planAgeSec)
+    local base = INTENT_BASE_COMMITMENT[intent] or 0.50
+    if STICKY_INTENTS[intent] then
+        local age = planAgeSec or 0
+        if age < 0 then age = 0 end
+        if age > 30 then age = 30 end
+        base = base + (age / 30) * 0.25   -- up to +0.25 after 30s
+    end
+    if base < 0 then return 0 end
+    if base > 1 then return 1 end
+    return base
+end
+
+-- ============================================================
 -- Intent computation
 -- ============================================================
 
@@ -1036,6 +1090,15 @@ function ____exports.MaybeRecompute(bot)
     plan.validUntil = now + PLAN_TTL
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
     if okPid then plan.authorID = pid end
+
+    -- Commitment: how authoritatively GetPlanBias enforces this plan.
+    -- Sticky intents grow commitment with age (anti-flip). The previous
+    -- intent's start time stays in _intentStartTime if trackIntent didn't
+    -- rotate it, so we read it for the age boost.
+    local intentStart = _intentStartTime[plan.intent]
+    local planAge = (intentStart ~= nil) and (now - intentStart) or 0
+    plan.commitment = computeCommitment(plan.intent, planAge)
+
     currentPlan = plan
     return plan
 end
@@ -1168,6 +1231,27 @@ function ____exports.GetPlanBias(bot, mode, teamSpirit)
     end
 
     local m = getMatch(plan.intent, mode)
+    local commitment = plan.commitment or 0.5
+
+    -- High-commitment plans are AUTHORITATIVE: bypass the teamSpirit
+    -- dampener and widen the bias range so contradicting modes get
+    -- hammered (~0.2x) and aligned modes get amplified (~1.6x). This
+    -- is what makes defend_base, push during a winning state, and
+    -- save_ally actually coordinate the whole team rather than
+    -- losing to one bot's high greed/independence personality.
+    --
+    -- Threshold 0.6 picked so push_lane crosses it after ~12s of
+    -- continuous push (base 0.50 + 0.10 age boost). Defensive intents
+    -- (defend_base 1.00, save_ally 0.95) are over the threshold from
+    -- the first tick they fire.
+    if commitment > 0.6 then
+        local expand = (commitment - 0.6) / 0.4 * 0.3
+        local lo = MIN_MULT - expand   -- 0.5 → 0.2 at full commit
+        local hi = MAX_MULT + expand   -- 1.3 → 1.6 at full commit
+        return lerp(lo, hi, m)
+    end
+
+    -- Low commitment: advisory, dampened by teamSpirit (existing behavior).
     local compliantMult = lerp(MIN_MULT, MAX_MULT, m)
     return 1.0 + clamp01(teamSpirit) * (compliantMult - 1.0)
 end
