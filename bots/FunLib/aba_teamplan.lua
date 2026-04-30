@@ -149,10 +149,13 @@ local function isTormentorContestable(bot, team)
 end
 
 local function isLotusContestable(team, now)
-    -- Lotus pools refresh every ~3 min after pickup. Without a direct API,
-    -- we bias toward contesting during laning + early mid-game when lotuses
-    -- matter most (sustain for the safelane / offlane).
-    if now < 60 or now > 14 * 60 then return false, nil end
+    -- Lotus pools refresh every ~3 min after pickup. Worth pickup as long as
+    -- the ruins are still our side of the map. Old window cut off at 14min,
+    -- which left supports walking past lotuses they should be grabbing all
+    -- the way through mid-game. Extended to 25min — by then the team should
+    -- be on rosh / push and the small sustain doesn't justify a rotation.
+    -- contest_lotus is role-gated to {4,5} so cores aren't pulled off.
+    if now < 60 or now > 25 * 60 then return false, nil end
     -- Score our nearest lotus location — prefer the one closer to the team center.
     local J = jmz()
     local teamFountain = J.GetTeamFountain and J.GetTeamFountain() or nil
@@ -576,12 +579,26 @@ local _lateGameFlavor = nil
 local function getOpeningFlavor()
     if _openingFlavor ~= nil then return _openingFlavor end
     local roll = RandomInt(1, 100)
-    if roll <= 22 then _openingFlavor = "lotus_rush"
-    elseif roll <= 45 then _openingFlavor = "aggro_roam"
-    elseif roll <= 70 then _openingFlavor = "passive_lane"
+    if roll <= 15 then _openingFlavor = "bounty_invade"   -- 15%: rotate to enemy bounty for FB
+    elseif roll <= 32 then _openingFlavor = "lotus_rush"
+    elseif roll <= 52 then _openingFlavor = "aggro_roam"
+    elseif roll <= 72 then _openingFlavor = "passive_lane"
     elseif roll <= 88 then _openingFlavor = "deward_scout"
     else _openingFlavor = "smoke_gank_early" end
     return _openingFlavor
+end
+
+-- Enemy bounty rune locations — used by bounty_invade opening flavor.
+-- Each team's bounties are mirrored across the map. We pick the bounty
+-- closer to the enemy team's safelane (the "near" one) for invades.
+local function getEnemyBountyLocation(myTeam)
+    if myTeam == TEAM_RADIANT then
+        -- Dire safelane bounty is near top — invade that one
+        return Vector(7456, -64, 384)
+    else
+        -- Radiant safelane bounty is near bot — invade that one
+        return Vector(-7456, 64, 384)
+    end
 end
 
 local function getMidgameFlavor(now)
@@ -647,6 +664,47 @@ local function computePlan(bot)
             local reason = string.format("real threat: enemies=%d hp=%.0f%% dmg=%s",
                 enemiesAtAncient, hpPct * 100, tostring(recentlyDamaged))
             return freshPlan("defend_base", nil, ourAncient:GetLocation(), reason)
+        end
+    end
+
+    -- 1.5 USER PING → push_lane / defend_lane.
+    --
+    -- User pings are an EXPLICIT command channel: "the team should be HERE
+    -- doing THAT". Previously assemble_generic responded by walking bots to
+    -- the ping — but team plan didn't issue a push_lane intent, so once
+    -- bots arrived, no mode kept them attacking. This wires the ping into
+    -- the team plan layer.
+    --
+    -- Ping on enemy-side of map → push_lane (with the ping's location;
+    -- push_tower mode finds the actual structure from there).
+    -- Ping on our side → defend_lane (treat as "help here").
+    -- 8-second window so a single ping commits the team for a push without
+    -- requiring the user to spam clicks.
+    local okJmz, jmzMod = pcall(jmz)
+    if okJmz and jmzMod and jmzMod.GetHumanPing then
+        local okPing, _, ping = pcall(function()
+            local m, p = jmzMod.GetHumanPing()
+            return m, p
+        end)
+        if okPing and ping ~= nil and ping.location ~= nil and ping.time ~= 0
+           and (now - ping.time) < 8 then
+            -- River line is x+y=0. Radiant safe-side has x+y < 0; Dire's
+            -- safe side x+y > 0. So enemy-side for us = opposite sign.
+            local pingSum = (ping.location.x or 0) + (ping.location.y or 0)
+            local enemySide
+            if team == TEAM_RADIANT then
+                enemySide = (pingSum > 0)
+            else
+                enemySide = (pingSum < 0)
+            end
+            if enemySide then
+                return freshPlan("push_lane", nil, ping.location,
+                    "user pinged enemy side — push")
+            else
+                -- Our side: lane help, not full base defense.
+                return freshPlan("defend_lane", nil, ping.location,
+                    "user pinged own side — group up")
+            end
         end
     end
 
@@ -934,7 +992,19 @@ local function computePlan(bot)
     -- per match; applies during laning phase when no urgent intent fires.
     if now < 4 * 60 then
         local flavor = getOpeningFlavor()
-        if flavor == "lotus_rush" then
+        if flavor == "bounty_invade" then
+            -- Pre-game and first 90s only — invade enemy bounty for FB / steal.
+            -- Routes the team to the enemy bounty location via smoke_gank
+            -- intent. Role gating on smoke_gank ({1,2,3,4,5}) means whole
+            -- team converges; user wanted occasional FB pressure, not every
+            -- match. Capped at 90s — past that, stale invade risks 5-man
+            -- counter-gank from enemy team that's now grouped.
+            if now < 90 then
+                local enemyBounty = getEnemyBountyLocation(team)
+                return freshPlan("smoke_gank", nil, enemyBounty, "opening: bounty_invade")
+            end
+            -- After the invade window, fall through to lane.
+        elseif flavor == "lotus_rush" then
             return freshPlan("lane_gank", nil, nil, "opening: lotus_rush->support_rotation")
         elseif flavor == "aggro_roam" or flavor == "smoke_gank_early" then
             -- Bias toward team_roam even without a low-HP focus (opportunistic rotations)

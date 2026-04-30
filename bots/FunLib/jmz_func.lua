@@ -1847,11 +1847,35 @@ function J.IsGoingOnSomeone( bot )
 
 	local mode = bot:GetActiveMode()
 
-	return mode == BOT_MODE_ROAM
+	-- Aggressive modes: bot is actively trying to fight someone.
+	if mode == BOT_MODE_ROAM
 		or mode == BOT_MODE_TEAM_ROAM
 		or mode == BOT_MODE_GANK
 		or mode == BOT_MODE_ATTACK
 		or mode == BOT_MODE_DEFEND_ALLY
+	then
+		return true
+	end
+
+	-- Push / defend tower modes count as "going on someone" if there's an
+	-- enemy hero in fighting range. Without this, ~545 ult-gates across the
+	-- hero library never fire during 5-man pushes or tower defenses — Doom
+	-- never ulted, Tide never ravaged, Magnus never RP'd, etc. The downstream
+	-- Consider functions still validate the actual target, so widening the
+	-- gate doesn't make heroes ult creep waves.
+	if mode == BOT_MODE_PUSH_TOWER_TOP
+		or mode == BOT_MODE_PUSH_TOWER_MID
+		or mode == BOT_MODE_PUSH_TOWER_BOT
+		or mode == BOT_MODE_DEFEND_TOWER_TOP
+		or mode == BOT_MODE_DEFEND_TOWER_MID
+		or mode == BOT_MODE_DEFEND_TOWER_BOT
+		or mode == BOT_MODE_DEFEND_ALLY
+	then
+		local nEnemies = bot:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
+		if nEnemies ~= nil and #nEnemies > 0 then return true end
+	end
+
+	return false
 
 end
 

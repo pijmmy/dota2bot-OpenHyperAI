@@ -21,7 +21,16 @@ local ASSEMBLE_INTENTS = {
 	contest_tormentor = true,
 	defend_base = true,
 	defend_lane = true,
+	push_lane = true,    -- physically converge on push target (user-pinged tower)
+	smoke_gank = true,   -- bounty_invade and other smoke flavors carry a location
 }
+
+-- Location hysteresis: once we have an assembleLoc, only switch to a new
+-- location if it's meaningfully different. Without this, bots flicker
+-- between targets when plan.location oscillates 100-200u between recomputes
+-- (e.g. tower threat shifting between adjacent allies). Reported as: "Doom
+-- gets into a loop, moving between me and teammate."
+local LOC_HYSTERESIS_RADIUS = 800
 
 local assembleLoc = nil
 local assembleExpireTime = 0
@@ -68,8 +77,14 @@ function GetDesire()
 					assembleLoc = plan.location
 					assembleExpireTime = GameTime() + ASSEMBLE_DURATION * 2
 				else
-					-- Same intent ongoing: refresh target + expire
-					assembleLoc = plan.location
+					-- Same intent ongoing: only RE-target if the new location
+					-- is meaningfully different — prevents per-tick flicker
+					-- when plan.location wobbles by 100-200u.
+					if assembleLoc == nil
+					   or GetUnitToLocationDistance(bot, assembleLoc) <= ARRIVE_RADIUS
+					   or J.GetDistance(assembleLoc, plan.location) > LOC_HYSTERESIS_RADIUS then
+						assembleLoc = plan.location
+					end
 					assembleExpireTime = math.max(assembleExpireTime, GameTime() + ASSEMBLE_DURATION)
 				end
 				return J.Personality.ModulateDesire(bot, ASSEMBLE_DESIRE, 'assemble')
