@@ -643,12 +643,10 @@ function X.ConsiderFlamingLasso()
             and J.CanCastOnTargetAdvanced(enemyHero)
             and not J.IsSuspiciousIllusion(enemyHero)
             and not J.IsTaunted(enemyHero)
-            and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-            and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_enigma_black_hole_pull')
             and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not enemyHero:HasModifier('modifier_legion_commander_duel')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 800, false, BOT_MODE_NONE)
 

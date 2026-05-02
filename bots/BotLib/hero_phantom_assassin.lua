@@ -788,6 +788,7 @@ function X.ConsiderAS()
 		local npcTarget = J.GetProperTarget( bot )
 		if J.IsValidHero( npcTarget )
 			and J.CanCastOnMagicImmune( npcTarget )
+			and not J.HasDamageImmunityModifier( npcTarget )
 			and J.IsInRange( bot, npcTarget, nRadius - 160 )
 		then
 			return BOT_ACTION_DESIRE_MODERATE
