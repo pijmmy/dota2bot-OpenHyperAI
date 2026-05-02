@@ -955,10 +955,28 @@ local function computePlan(bot)
 
     -- 5.5 MISSING ENEMIES: 3+ enemies haven't been seen in >8s after minute 5
     -- usually means a smoke/rotation incoming. Bias to regroup defensively.
+    --
+    -- Push-then-retreat fix: if the current plan is push_lane (or contest_rosh)
+    -- with high commitment, do NOT flip to regroup just because enemies dropped
+    -- vision. The user explicitly reported "team starts to push tower then
+    -- retreats for no reason." The previous behavior was: bots commit to push,
+    -- enemies smoke or jungle for 8s, missing-enemy gate fires, plan flips to
+    -- regroup, bots peel off. That's the bug.
+    --
+    -- High-commitment push_lane has had 12+ seconds of investment (commitment
+    -- 0.5 base + 0.10 from the age boost crosses 0.6); aborting it on
+    -- speculative ghost-enemy signal hurts more than it helps.
     if now > 5 * 60 then
         local missing = countMissingEnemies(enemyTeam, 8)
         if missing >= 3 then
-            return freshPlan("regroup", nil, nil, "enemies missing=" .. tostring(missing) .. " (likely smoke/rotation)")
+            local cur = currentPlan or {}
+            local curCommit = cur.commitment or 0
+            local stickyIntent = cur.intent == "push_lane" or cur.intent == "contest_rosh"
+            if stickyIntent and curCommit > 0.6 then
+                -- skip the regroup override; let the next gates run
+            else
+                return freshPlan("regroup", nil, nil, "enemies missing=" .. tostring(missing) .. " (likely smoke/rotation)")
+            end
         end
     end
 
@@ -976,6 +994,24 @@ local function computePlan(bot)
         end
     end
     if now > lateGameGateSec then
+        -- Late-game offensive override: when winning (NW lead + alive parity),
+        -- promote the late-game fallback from defensive assembly (front-line
+        -- tower) to push_lane targeting the enemy's weakest lane. User
+        -- complaint: "team also does not stick together mid late game to
+        -- push towers or gain objects" — the old fallback assembled at OUR
+        -- frontmost tower regardless of game state, so winning teams stalled
+        -- defensively instead of closing.
+        local aliveAllies = countAliveTeamHeroes(team)
+        local aliveEnemies = countAliveTeamHeroes(enemyTeam)
+        local winning = (nwLead >= 4000) and (aliveAllies >= aliveEnemies) and (aliveAllies >= 4)
+        if winning and not isInCooldown("push_lane") then
+            local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
+            if pushTarget ~= nil then
+                _lastPushLaneTime = now
+                return freshPlan("push_lane", pushTarget.lane, pushTarget.loc,
+                    "late-game winning: push instead of group-defend")
+            end
+        end
         local groupLoc = computeGroupLocation(team)
         if groupLoc ~= nil then
             return freshPlan("late_game_group", nil, groupLoc, "late game: hold front-line tower")

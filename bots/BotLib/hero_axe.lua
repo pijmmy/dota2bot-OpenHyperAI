@@ -558,10 +558,20 @@ function X.HasSpecialModifier( npcEnemy )
 		or npcEnemy:HasModifier( 'modifier_item_aeon_disk_buff' )
 		or npcEnemy:HasModifier( 'modifier_item_sphere_target' )
 		or npcEnemy:HasModifier( 'modifier_illusion' )
+		-- Damage-immunity / heal-on-damage modifiers — Culling Blade execute
+		-- through Borrowed Time HEALS the target. Through Reaper's Scythe /
+		-- Shallow Grave / False Promise / Refraction the kill is consumed
+		-- by the immune window. Treat as "skip target."
+		or npcEnemy:HasModifier( 'modifier_abaddon_borrowed_time' )
+		or npcEnemy:HasModifier( 'modifier_dazzle_shallow_grave' )
+		or npcEnemy:HasModifier( 'modifier_necrolyte_reapers_scythe' )
+		or npcEnemy:HasModifier( 'modifier_oracle_false_promise_timer' )
+		or npcEnemy:HasModifier( 'modifier_templar_assassin_refraction_absorb' )
+		or npcEnemy:HasModifier( 'modifier_skeleton_king_reincarnation_scepter_active' )
 	then
 		return true
 	else
-		return false	
+		return false
 	end
 
 end

@@ -801,6 +801,16 @@ function X.CanCastAbilityROnTarget( nTarget )
 
 	if J.CanCastOnTargetAdvanced( nTarget )
 		and not nTarget:HasModifier( "modifier_arc_warden_tempest_double" )
+		-- Damage-immunity / heal-on-damage modifiers — Laguna Blade is a
+		-- single-target nuke; firing into Borrowed Time HEALS the target,
+		-- and Reaper's Scythe / Shallow Grave / False Promise / Refraction
+		-- absorb or no-op the cast. Skip explicitly to avoid wasted ult.
+		and not nTarget:HasModifier( "modifier_abaddon_borrowed_time" )
+		and not nTarget:HasModifier( "modifier_dazzle_shallow_grave" )
+		and not nTarget:HasModifier( "modifier_necrolyte_reapers_scythe" )
+		and not nTarget:HasModifier( "modifier_oracle_false_promise_timer" )
+		and not nTarget:HasModifier( "modifier_templar_assassin_refraction_absorb" )
+		and not nTarget:HasModifier( "modifier_skeleton_king_reincarnation_scepter_active" )
 	then
 		if bot:HasScepter()
 		then

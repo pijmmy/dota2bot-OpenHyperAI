@@ -200,6 +200,13 @@ local function __TS__ArrayForEach(self, callbackFn, thisArg)
     end
 end
 -- End of Lua Library inline imports
+
+-- Per-bot stickiness for the defend-mode creep target picker. Without this,
+-- the highest-damage creep selection loop can flicker between summoned
+-- creeps (brood spiderlings, lycan wolves, etc.) with identical attack
+-- damage. 1.5s lock matches the aba_push pattern.
+local _lastDefendCreep = {}
+
 local ____exports = {}
 local getDefendState, updateDefendGameStateCache, updateDefendLocationStateCache, updateDefendUnitStateCache, _q, _keyLoc, _recentHeroCountNear, IsValidBuildingTarget, IsBaseThreatActive, WeightedEnemiesAroundLocation, GetThreatenedLane, GetClosestAllyPos, IsThereNoTeammateTravelBootsDefender, GetHighGroundEdgeWaitPoint, ConsiderPingedDefend, okLoc, Localization, PING_DELTA, MAX_DESIRE_CAP, BASE_THREAT_RADIUS, BASE_THREAT_HOLD, CACHE_ENEMY_AROUND_LOC_HZ, CACHE_LASTSEEN_WINDOW, nTeam, _threatLaneSticky, baseThreatUntil, fTraveBootsDefendTime, _cacheEnemyAroundLoc, DEFEND_CACHE_TTL, defendGameStateCache, defendLocationStateCache, defendUnitStateCache
 local jmz = require(GetScriptDirectory().."/FunLib/jmz_func")
@@ -1362,6 +1369,22 @@ function ____exports.DefendThink(bot, lane)
     end
     local creeps = bot:GetNearbyCreeps(900, true)
     if creeps and #creeps > 0 and (not enemiesAtHub or #enemiesAtHub == 0) then
+        -- Stickiness: same pattern as aba_push.lua. Without this, the
+        -- highest-damage creep selection loop below can flicker between
+        -- multiple summoned creeps with identical attack damage (brood
+        -- spiderlings, lycan wolves, etc.). The reported "Doom dithers
+        -- at broodmother spiders, can't kill any of them" symptom in
+        -- the DEFEND_TOWER mode path. 1.5s lock keeps the bot committed.
+        local pid = bot:GetPlayerID()
+        local cached = _lastDefendCreep[pid]
+        local now = DotaTime()
+        if cached ~= nil and cached.expires > now then
+            local u = cached.unit
+            if jmz.IsValid(u) and jmz.CanBeAttacked(u) and jmz.IsInRange(bot, u, 900) then
+                bot:Action_AttackUnit(u, true)
+                return
+            end
+        end
         local best = nil
         local bestDmg = -1
         for ____, c in ipairs(creeps) do
@@ -1375,6 +1398,7 @@ function ____exports.DefendThink(bot, lane)
         end
         if best then
             bot:Action_AttackUnit(best, true)
+            _lastDefendCreep[pid] = { unit = best, expires = now + 1.5 }
             return
         end
     end
