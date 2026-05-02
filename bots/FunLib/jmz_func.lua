@@ -1760,9 +1760,41 @@ function J.IsInTeamFight( bot, nRadius )
 
 	if nRadius == nil or nRadius > 1600 then nRadius = 1600 end
 
+	-- Original gate: 2+ allies in BOT_MODE_ATTACK. Problem — that requires
+	-- the fight to ALREADY be in progress, so initiator ults (Magnus RP,
+	-- Tide Ravage, Enigma BH, FV Chrono, Witch Doctor Death Ward, Phoenix
+	-- Supernova, etc.) couldn't fire to START a fight. Extended to also
+	-- recognize active GANK / TEAM_ROAM / push and the team-plan intent
+	-- being commit_kill / save_ally / push_lane — those are "team is
+	-- engaging" signals that ults should respond to.
 	local attackModeAllyList = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_ATTACK )
+	if #attackModeAllyList >= 2 then return true end
 
-	return #attackModeAllyList >= 2 -- and bot:GetActiveMode() ~= BOT_MODE_RETREAT
+	-- Engaged-but-not-yet-attacking: 2+ allies in roam/gank/team_roam modes
+	-- nearby. Allows initiator ults to fire as the team commits.
+	local roamAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_TEAM_ROAM )
+	if roamAllies and #roamAllies >= 2 then return true end
+	local gankAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_GANK )
+	if gankAllies and #gankAllies >= 2 then return true end
+
+	-- Team-plan signal: if the team plan is commit_kill / save_ally with
+	-- the bot near the focus, treat as in-fight. This is the Phase-14
+	-- coordination layer talking to the per-hero ult considers.
+	local okTP, plan = pcall(function()
+		if J.TeamPlan and J.TeamPlan.GetCurrentPlan then
+			return J.TeamPlan.GetCurrentPlan()
+		end
+		return nil
+	end)
+	if okTP and plan ~= nil and plan.intent ~= nil then
+		if plan.intent == "commit_kill" or plan.intent == "save_ally" then
+			-- Need ≥1 ally within radius (so we don't ult solo)
+			local nearbyAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_NONE)
+			if nearbyAllies and #nearbyAllies >= 1 then return true end
+		end
+	end
+
+	return false
 
 end
 
