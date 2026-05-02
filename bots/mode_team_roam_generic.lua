@@ -110,8 +110,11 @@ function GetDesireHelper()
     local target
     target, ShouldHelpWhenCoreIsTargeted = X.ConsiderHelpWhenCoreIsTargeted()
     if ShouldHelpWhenCoreIsTargeted then
+        -- Hysteresis: SetStickyTarget already updates targetUnit + calls
+        -- bot:SetTarget when its 1.2s lock allows. The previous redundant
+        -- `targetUnit = target` assignment defeated that lock — see the
+        -- engineering-discipline trace in commit 3d9fc95 for context.
         SetStickyTarget(target)
-        targetUnit = target
         return RemapValClamped(J.GetHP(bot), 0, 0.5, BOT_MODE_DESIRE_NONE, 0.98)
     end
 
@@ -121,7 +124,6 @@ function GetDesireHelper()
     target, ShouldHelpAlly = ConsiderHelpAlly()
     if ShouldHelpAlly then
         SetStickyTarget(target)
-        targetUnit = target
         return RemapValClamped(J.GetHP(bot), 0, 0.6, BOT_MODE_DESIRE_NONE, 0.98)
     end
 
@@ -164,16 +166,20 @@ function GetDesireHelper()
         if IsHeroCore then
             local botTarget, targetDesire = X.CarryFindTarget()
             if botTarget ~= nil then
-                targetUnit = botTarget
-                bot:SetTarget(botTarget)
+                -- Was: bypassed SetStickyTarget hysteresis with direct
+                -- targetUnit + bot:SetTarget assignment. Per-tick CarryFindTarget
+                -- can pick different targets in similar-priority scenarios
+                -- (Doom-vs-broodmother + spiderlings: low-HP swarmers compete
+                -- with brood for "lowest HP wins"). Routing through SetStickyTarget
+                -- enforces the 1.2s lock so target stays stable.
+                SetStickyTarget(botTarget)
                 return RemapValClamped(J.GetHP(bot), 0, 0.4, BOT_MODE_DESIRE_NONE, targetDesire)
             end
         end
         if IsSupport then
             local botTarget, targetDesire = X.SupportFindTarget()
             if botTarget ~= nil then
-                targetUnit = botTarget
-                bot:SetTarget(botTarget)
+                SetStickyTarget(botTarget)
                 return RemapValClamped(J.GetHP(bot), 0, 0.4, BOT_MODE_DESIRE_NONE, targetDesire)
             end
         end
