@@ -939,7 +939,9 @@ function X.DoCombo()
                                 local nInRangeAlly = enemy:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
                                 local nInRangeEnemy = enemy:GetNearbyHeroes(1200, false, BOT_MODE_NONE)
                                 local enemyDamage = enemy:GetAttackDamage() * enemy:GetAttackSpeed() + enemy:GetEstimatedDamageToTarget(false, bot, 4.0, DAMAGE_TYPE_ALL)
-                                if enemyDamage > targetDamage and #nInRangeAlly >= #nInRangeEnemy and not (#nInRangeAlly >= #nInRangeEnemy + 2) then
+                                -- Removed `not (#nInRangeAlly >= #nInRangeEnemy + 2)` — same Doom-class
+                                -- over-cautious gate that skipped target selection in winning fights.
+                                if enemyDamage > targetDamage and #nInRangeAlly >= #nInRangeEnemy then
                                     target = enemy
                                     targetDamage = enemyDamage
                                 end
