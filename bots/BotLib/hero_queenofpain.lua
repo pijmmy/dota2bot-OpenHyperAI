@@ -797,6 +797,7 @@ function X.ConsiderR()
 		if J.IsValidHero( botTarget )
 			and J.IsInRange( bot, botTarget, nCastRange + nRadius * 0.5 )
 			and J.CanCastOnMagicImmune( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 		then
 			local nearbyEnemyList = J.GetNearbyHeroes(botTarget,  nRadius, false, BOT_MODE_NONE )
 			if J.CanKillTarget( botTarget, nDamage * 1.3, nDamageType )
