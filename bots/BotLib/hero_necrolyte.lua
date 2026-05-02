@@ -505,6 +505,7 @@ function X.ConsiderR()
 			and not J.IsHaveAegis( botTarget )
 			and not botTarget:HasModifier( "modifier_arc_warden_tempest_double" )
 			and botTarget:GetUnitName() ~= "npc_dota_hero_abaddon"
+			and not J.HasDamageImmunityModifier( botTarget )
 			and J.IsInRange( botTarget, bot, nCastRange + 200 )
 		then
 			local EstDamage = X.GetEstDamage( bot, botTarget, nDamagePerHealth )
@@ -529,6 +530,7 @@ function X.ConsiderR()
 				and not J.IsHaveAegis( npcEnemy )
 				and not npcEnemy:HasModifier( "modifier_arc_warden_tempest_double" )
 				and npcEnemy:GetUnitName() ~= "npc_dota_hero_abaddon"
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				local EstDamage = X.GetEstDamage( bot, npcEnemy, nDamagePerHealth )
 				if J.CanKillTarget( npcEnemy, EstDamage, DAMAGE_TYPE_MAGICAL )

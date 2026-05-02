@@ -966,6 +966,7 @@ function X.ConsiderR()
 		if J.IsValidHero( npcEnemy )
 			and J.CanCastOnNonMagicImmune( npcEnemy )
 			and J.CanCastOnTargetAdvanced( npcEnemy )
+			and not J.HasDamageImmunityModifier( npcEnemy )
 		then
 			local nDelayTime = nCastPoint + GetUnitToUnitDistance( bot, npcEnemy )/850
 			if J.WillMagicKillTarget( bot, npcEnemy, nDamage, nDelayTime )
@@ -987,6 +988,7 @@ function X.ConsiderR()
 				if J.IsValidHero( npcEnemy )
 					and J.CanCastOnNonMagicImmune( npcEnemy )
 					and J.CanCastOnTargetAdvanced( npcEnemy )
+					and not J.HasDamageImmunityModifier( npcEnemy )
 					and J.IsInLocRange( npcEnemy, nAoeLoc, nRadius )
 				then
 					return BOT_ACTION_DESIRE_HIGH, npcEnemy, 'R-Aoe:'..J.Chat.GetNormName( npcEnemy )
