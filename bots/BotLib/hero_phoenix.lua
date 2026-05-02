@@ -299,6 +299,7 @@ function X.ConsiderIcarusDive()
         and not J.IsEnemyChronosphereInLocation(botTarget:GetLocation())
         and not J.IsEnemyBlackHoleInLocation(botTarget:GetLocation())
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nHealth > 0.3
         then
             if #tAllyHeroes >= #tEnemyHeroes + 1
@@ -409,6 +410,7 @@ function X.ConsiderFireSpirits()
             and not J.IsEnemyChronosphereInLocation(enemy:GetLocation())
             and not J.IsEnemyBlackHoleInLocation(enemy:GetLocation())
             and not enemy:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemy)
             and not enemy:HasModifier('modifier_phoenix_fire_spirit_burn') then
                 local enemyAttackDamage = enemy:GetAttackDamage() * enemy:GetAttackSpeed()
                 if enemyAttackDamage > targetAttackDamage then
@@ -555,6 +557,7 @@ function X.ConsiderFireSpiritsLaunch()
             and not J.IsEnemyChronosphereInLocation(enemy:GetLocation())
             and not J.IsEnemyBlackHoleInLocation(enemy:GetLocation())
             and not enemy:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemy)
             and not enemy:HasModifier('modifier_phoenix_fire_spirit_burn') then
                 local enemyAttackDamage = enemy:GetAttackDamage() * enemy:GetAttackSpeed()
                 if enemyAttackDamage > targetAttackDamage then
@@ -719,6 +722,7 @@ function X.ConsiderSunRay()
             and not enemy:HasModifier('modifier_abaddon_borrowed_time')
             and not enemy:HasModifier('modifier_dazzle_shallow_grave')
             and not enemy:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemy)
             and botHP > 0.4 then
                 local enemyHP = enemy:GetHealth()
                 if enemyHP < targetHP then

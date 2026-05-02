@@ -237,6 +237,7 @@ function X.ConsiderVacuum()
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier("modifier_legion_commander_duel")
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -281,6 +282,7 @@ function X.ConsiderIonShell()
                 and not allyHero:IsIllusion()
                 and not allyHero:HasModifier('modifier_dark_seer_ion_shell')
                 and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(allyHero)
                 then
                     local nAllyCount = 0
                     local nAllyEnemyHeroes = J.GetNearbyHeroes(allyHero, 1200, true, BOT_MODE_NONE)
@@ -476,6 +478,7 @@ function X.ConsiderSurge()
                 and not J.IsSuspiciousIllusion(allyTarget)
                 and not allyTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and not allyTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(allyTarget)
                 and allyHero:IsFacingLocation(allyTarget:GetLocation(), 30)
                 then
 					tToMeDist = dist

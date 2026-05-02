@@ -241,6 +241,7 @@ function X.ConsiderStarBreaker()
         and not J.IsSuspiciousIllusion(botTarget)
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and nInRangeAlly ~= nil and nInRangeEnemy
         and #nInRangeAlly >= #nInRangeEnemy
@@ -349,6 +350,7 @@ function X.ConsiderCelestialHammer()
 		and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
 		and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
 		and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(enemyHero)
         and J.CanKillTarget(enemyHero, nDamage, DAMAGE_TYPE_MAGICAL)
         then
             local nDelay = (GetUnitToUnitDistance(bot, enemyHero) / nSpeed) + nCastPoint

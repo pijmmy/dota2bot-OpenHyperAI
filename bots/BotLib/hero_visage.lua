@@ -334,6 +334,7 @@ function X.ConsiderSoulAssumption()
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             and Stacks == nStackLimit
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)

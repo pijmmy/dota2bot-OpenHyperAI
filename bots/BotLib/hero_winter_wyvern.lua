@@ -266,6 +266,7 @@ function X.ConsiderArcticBurn()
             and not J.IsSuspiciousIllusion(botTarget)
             and not J.IsDisabled(botTarget)
             and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(botTarget)
 			then
                 if ArcticBurn:GetToggleState() == false
                 then
@@ -396,6 +397,7 @@ function X.ConsiderSplinterBlast()
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -748,6 +750,7 @@ function X.ConsiderColdEmbrace()
                 and not allyHero:HasModifier('modifier_abaddon_borrowed_time')
                 and not allyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not allyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(allyHero)
                 and not allyHero:HasModifier('modifier_obsidian_destroyer_astral_imprisonment_prison')
                 then
                     return BOT_ACTION_DESIRE_HIGH, allyHero
@@ -884,6 +887,7 @@ function X.ConsiderWintersCurse()
         and not J.IsSuspiciousIllusion(enemyHero)
         and J.GetHP(enemyHero) >= 0.4
         and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(enemyHero)
         and not J.IsUnderLongDurationStun(enemyHero)
 		then
             local nInRangeAlly = J.GetAlliesNearLoc(enemyHero:GetLocation(), 400)

@@ -241,6 +241,7 @@ function X.ConsiderShadowRealm()
         and J.IsInRange(bot, botTarget, bot:GetAttackRange())
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not J.IsRealInvisible(bot)
         and nEnemyHeroes ~= nil and #nEnemyHeroes >= 2
 		then

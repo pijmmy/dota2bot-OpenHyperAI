@@ -371,6 +371,7 @@ function X.ConsiderPoisonAttack()
                 and not J.IsTaunted(enemyHero)
                 and not J.IsSuspiciousIllusion(enemyHero)
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
 				and not enemyHero:HasModifier('modifier_viper_poison_attack_slow')
 				then
                     return BOT_ACTION_DESIRE_HIGH, enemyHero
@@ -403,6 +404,7 @@ function X.ConsiderNetherToxin()
 		and J.CanCastOnNonMagicImmune(botTarget)
 		and J.IsInRange(bot, botTarget, nCastRange)
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and not botTarget:HasModifier('modifier_viper_nethertoxin')
 		then
 			local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
@@ -603,6 +605,7 @@ function X.ConsiderViperStrike()
 				and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 				and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
 				and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+				and not J.HasDamageImmunityModifier(botTarget)
 				and not botTarget:HasModifier('modifier_item_sphere_target')
 				then
 					return BOT_ACTION_DESIRE_HIGH, botTarget
@@ -658,6 +661,7 @@ function X.ConsiderNosedive()
         and not botTarget:IsMagicImmune()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)

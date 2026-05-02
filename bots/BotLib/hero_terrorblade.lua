@@ -241,6 +241,7 @@ function X.ConsiderConjureImage()
 		and not J.IsInEtherealForm(botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 		and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -339,6 +340,7 @@ function X.ConsiderMetamorphosis()
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy
 		and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -417,6 +419,7 @@ function X.ConsiderDemonZeal()
 			and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 			and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 			and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+			and not J.HasDamageImmunityModifier(botTarget)
 			and nInRangeAlly ~= nil and nInRangeEnemy
 			and #nInRangeAlly >= #nInRangeEnemy
 			then
@@ -462,6 +465,7 @@ function X.ConsiderTerrorWave()
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy
 		and #nInRangeAlly >= #nInRangeEnemy
 		then

@@ -294,6 +294,7 @@ function X.ConsiderQ()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, J.GetCorrectLoc(botTarget, nCastPoint)
 		end
@@ -448,6 +449,7 @@ function X.ConsiderW()
 		and not J.IsDisabled( botTarget )
 		and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, J.GetCorrectLoc(botTarget, nDelay + nCastPoint)
 		end
@@ -746,6 +748,7 @@ function X.ConsiderR()
 			and J.CanCastOnNonMagicImmune( botTarget )
 			and J.IsInRange( botTarget, bot, nCastRange -200 )
 			and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local targetAllies = botTarget:GetNearbyHeroes( 2 * nRadius, false, BOT_MODE_NONE )
 			if #targetAllies >= 2 or J.IsInRange( botTarget, bot, 600 )

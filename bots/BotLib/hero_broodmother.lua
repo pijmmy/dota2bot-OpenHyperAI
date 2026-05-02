@@ -194,6 +194,7 @@ function X.ConsiderInsatiableHunger()
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -283,6 +284,7 @@ function X.ConsiderSpinWeb()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not DoesLocationHaveWeb(botTarget:GetLocation(), nRadius)
         and not J.IsLocationInChrono(botTarget:GetLocation())
         and not J.IsLocationInBlackHole(botTarget:GetLocation())
@@ -538,6 +540,7 @@ function X.ConsiderSpawnSpiderlings()
         and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
         and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             return BOT_ACTION_DESIRE_HIGH, enemyHero
         end

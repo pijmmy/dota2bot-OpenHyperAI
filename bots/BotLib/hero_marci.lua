@@ -246,6 +246,7 @@ function X.ConsiderBodyguard()
             and not ally:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not ally:HasModifier('modifier_marci_guardian_buff')
             and not ally:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(ally)
             then
                 local allyAttackDamage = ally:GetAttackDamage() * ally:GetAttackSpeed()
                 if allyAttackDamage > targetAttackDamage then
@@ -310,6 +311,7 @@ function X.ConsiderDispose()
         and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             if GetUnitToLocationDistance(bot, J.GetEnemyFountain()) > GetUnitToLocationDistance(botTarget, J.GetEnemyFountain()) then
                 return BOT_ACTION_DESIRE_HIGH, botTarget
@@ -481,6 +483,7 @@ function X.ConsiderRebound()
                     and not enemy:HasModifier('modifier_faceless_void_chronosphere_freeze')
                     and not enemy:HasModifier('modifier_necrolyte_reapers_scythe')
                     and not enemy:HasModifier('modifier_oracle_false_promise_timer')
+                    and not J.HasDamageImmunityModifier(enemy)
                     then
                         return BOT_ACTION_DESIRE_HIGH, ally
                     end
@@ -521,6 +524,7 @@ function X.ConsiderSidekick()
             and not ally:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not ally:HasModifier('modifier_marci_guardian_buff')
             and not ally:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(ally)
             then
                 local allyAttackDamage = ally:GetAttackDamage() * ally:GetAttackSpeed()
                 if allyAttackDamage > targetAttackDamage then
@@ -574,6 +578,7 @@ function X.ConsiderUnleash()
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_item_blade_mail_reflect')
         and not botTarget:HasModifier('modifier_item_aeon_disk_buff')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not (#nAllyHeroes >= #nEnemyHeroes + 3)
         then
             if J.IsInLaningPhase() and #nAllyHeroes <= 2 and #nEnemyHeroes <= 1 then

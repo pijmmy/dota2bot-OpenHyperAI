@@ -258,6 +258,7 @@ function X.ConsiderSwashbuckle()
         and not weakestTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(weakestTarget)
         then
             local nTargetInRangeAlly = J.GetNearbyHeroes(weakestTarget, 800, false, BOT_MODE_NONE)
 
@@ -511,6 +512,7 @@ function X.ConsiderShieldCrash()
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(weakestTarget)
         then
             local nTargetInRangeAlly = J.GetNearbyHeroes(weakestTarget, 1200, false, BOT_MODE_NONE)
 

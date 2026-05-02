@@ -350,6 +350,7 @@ function X.ConsiderResonantPulse()
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 		and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -463,6 +464,7 @@ function X.ConsiderAstralStep()
 		and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
 		and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
 		and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(enemyHero)
 		then
 			return BOT_ACTION_DESIRE_HIGH, enemyHero:GetExtrapolatedLocation(nCastPoint)
 		end

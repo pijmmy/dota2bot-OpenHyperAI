@@ -246,6 +246,7 @@ function X.ConsiderSpearOfMars()
 			and J.IsInRange(bot, enemyHero, nCastRange - 150)
 			and not J.IsDisabled(enemyHero)
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				return BOT_ACTION_DESIRE_HIGH, enemyHero:GetLocation()
 			end
@@ -390,6 +391,7 @@ function X.ConsiderGodsRebuke()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local nLocationAoE = bot:FindAoELocation(true, true, botTarget:GetLocation(), 0, nRadius, 0, 0)
 			if nLocationAoE.count >= 1 then
@@ -665,6 +667,7 @@ function X.ConsiderSpearToAlly()
 			and not J.IsInRange(bot, botTarget, 500)
 			and not J.IsDisabled(botTarget)
 			and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(botTarget)
 			then
 				local nInRangeAlly = J.GetAlliesNearLoc(botTarget:GetLocation(), nCastRange)
 				local nInRangeEnemy = J.GetEnemiesNearLoc(botTarget:GetLocation(), nCastRange)

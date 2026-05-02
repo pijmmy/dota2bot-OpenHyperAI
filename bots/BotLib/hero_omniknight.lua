@@ -299,6 +299,7 @@ function X.ConsiderQ()
 			and not npcEnemy:HasModifier( 'modifier_dazzle_shallow_grave' )
 			and not npcEnemy:HasModifier( 'modifier_necrolyte_reapers_scythe' )
 			and not npcEnemy:HasModifier( 'modifier_oracle_false_promise_timer' )
+			and not J.HasDamageImmunityModifier(npcEnemy)
 		then
 			local bestTarget = nil
 			local bestTargetHP = 9
@@ -709,6 +710,7 @@ function X.ConsiderE()
 			and not J.IsSuspiciousIllusion( npcTarget )
 			and not npcTarget:HasModifier( 'modifier_abaddon_borrowed_time' )
 			and not npcTarget:HasModifier( 'modifier_dazzle_shallow_grave' )
+			and not J.HasDamageImmunityModifier(npcTarget)
 			and not npcTarget:HasModifier( 'modifier_item_blade_mail_reflect' )
 		then
 			if nSkillLV >= 3 or nMP > 0.68 or J.GetHP( npcTarget ) < 0.4 or nHP < 0.25

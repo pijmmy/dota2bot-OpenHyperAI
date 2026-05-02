@@ -449,6 +449,7 @@ function X.ConsiderFlameGuard()
 		and J.IsInRange(bot, botTarget, nRadius - 75)
 		and not J.IsSuspiciousIllusion(botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH
 		end
@@ -627,6 +628,7 @@ function X.ConsiderFireRemnant()
 		and J.IsInRange(bot, botTarget, nCastRange)
 		and not J.IsSuspiciousIllusion(botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and not botTarget:HasModifier('modifier_faceless_void_chronosphere')
 		then
 			local nInRangeAlly = J.GetNearbyHeroes(botTarget, nCastRange + 100, false, BOT_MODE_NONE)

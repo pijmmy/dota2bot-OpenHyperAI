@@ -254,6 +254,7 @@ function X.ConsiderBoundlessStrike()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 1000, false, BOT_MODE_NONE)
 
@@ -448,6 +449,7 @@ function X.ConsiderTreeDance()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local nTrees = bot:GetNearbyTrees(nCastRange)
 
@@ -567,6 +569,7 @@ function X.ConsiderPrimalSpring()
         and not weakestTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(weakestTarget)
         and not J.IsLocationInChrono(weakestTarget:GetLocation())
         and not J.IsLocationInBlackHole(weakestTarget:GetLocation())
 		then
@@ -706,6 +709,7 @@ function X.ConsiderWukongsCommand()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not J.IsLocationInChrono(botTarget:GetLocation())
         and not J.IsLocationInBlackHole(botTarget:GetLocation())
 		then

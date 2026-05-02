@@ -340,6 +340,7 @@ function X.ConsiderEchoSlash()
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             return BOT_ACTION_DESIRE_HIGH
         end
@@ -538,6 +539,7 @@ function X.ConsiderRaptorDance()
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
 		and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and hAllyList ~= nil and hEnemyList ~= nil
 		and #hAllyList >= #hEnemyList
 		then
@@ -596,6 +598,7 @@ function X.ConsiderKazuraiKatana()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
         and not botTarget:HasModifier('modifier_ursa_enrage')
         then
@@ -632,6 +635,7 @@ function X.ConsiderFalconRush()
         and not J.IsEnemyBlackHoleInLocation(botTarget:GetLocation())
         and not J.IsEnemyChronosphereInLocation(botTarget:GetLocation())
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
         then
             if J.IsInLaningPhase() then
@@ -745,6 +749,7 @@ function X.ConsiderTalonToss()
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
         then
             return BOT_ACTION_DESIRE_HIGH, botTarget

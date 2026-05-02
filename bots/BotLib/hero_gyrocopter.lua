@@ -177,6 +177,7 @@ function X.ConsiderRocketBarrage()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy
         and #nInRangeAlly >= #nInRangeEnemy
         and nCreeps ~= nil and #nCreeps <= 1
@@ -263,6 +264,7 @@ function X.ConsiderHomingMissile()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
         and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             return BOT_ACTION_DESIRE_HIGH, enemyHero
         end
@@ -401,6 +403,7 @@ function X.ConsiderFlakCannon()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy
         and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -483,6 +486,7 @@ function X.ConsiderCallDown()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
         and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         and nInRangeAlly ~= nil and nEnemyHeroes ~= nil
         and #nInRangeAlly <= 2 and #nEnemyHeroes <= 2
         then

@@ -259,6 +259,7 @@ function X.ConsiderSpectralDagger()
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 if J.CanKillTarget(enemyHero, nDamage, DAMAGE_TYPE_MAGICAL)
                 then

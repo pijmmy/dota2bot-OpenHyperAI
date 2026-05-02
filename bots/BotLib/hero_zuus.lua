@@ -610,6 +610,17 @@ function X.ConsiderR()
 	do
 		if e ~= nil
 			and J.CanCastOnNonMagicImmune( e )
+			-- Skip damage-immune / heal-on-damage / aegis targets — global
+			-- Thundergod's Wrath wastes on these. (Aegis is a separate
+			-- modifier that just heals on death; ulting through it is fine
+			-- but suboptimal — better to wait.)
+			and not e:HasModifier( "modifier_abaddon_borrowed_time" )
+			and not e:HasModifier( "modifier_dazzle_shallow_grave" )
+			and not e:HasModifier( "modifier_necrolyte_reapers_scythe" )
+			and not e:HasModifier( "modifier_oracle_false_promise_timer" )
+			and not e:HasModifier( "modifier_templar_assassin_refraction_absorb" )
+			and not J.HasDamageImmunityModifier(e)
+			and not J.IsHaveAegis( e )
 		then
 			local nEstDamage = nDamage + e:GetHealth() * abilityASBonus
 			if J.WillMagicKillTarget( bot, e, nEstDamage, nCastPoint )

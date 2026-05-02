@@ -251,6 +251,7 @@ function X.ConsiderStaticRemnant()
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
 		and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local bChasingTarget = J.IsChasingTarget(bot, botTarget)
 			if not bChasingTarget or (bChasingTarget and J.IsInRange(bot, botTarget, nAttackRange)) then

@@ -419,6 +419,7 @@ function X.ConsiderMeatHook(MeatHook, Rot, Dismember, botTarget, botHP, nEnemyHe
                         if  J.IsValidHero(enemyHero)
                         and not J.IsSuspiciousIllusion(enemyHero)
                         and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
+                        and not J.HasDamageImmunityModifier(enemyHero)
                         and not enemyHero:HasModifier('modifier_abaddon_aphotic_shield')
                         then
                             local eta = (GetUnitToUnitDistance(bot, enemyHero) / nSpeed) + nCastPoint
@@ -541,6 +542,7 @@ function X.ConsiderRot(Rot, botTarget, botHP, nRotRadius, nEnemyHeroesNearRot)
             and not J.IsSuspiciousIllusion(enemyHero)
             and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 if Rot:GetToggleState() == false
                 then
@@ -778,6 +780,7 @@ function X.ConsiderDismember(Dismember, botTarget, botHP, nEnemyHeroesNearRot)
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(weakestTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(weakestTarget, 1200, false, BOT_MODE_NONE)
 
