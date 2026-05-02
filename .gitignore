@@ -66,3 +66,7 @@ dist
 
 # user's personal customized settings
 game/Customize
+
+# Claude Code per-session marker (managed by hooks; never committed)
+.claude/work-complete
+.claude/settings.local.json

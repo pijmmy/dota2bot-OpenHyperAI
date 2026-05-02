@@ -91,6 +91,57 @@ fires (or doesn't) that didn't before.
 - When the work is genuinely days, say *"this is days of work, here is
   what days one and two look like"* — not *"hours."*
 
+### Banned phrases (mechanically enforced via Stop hook)
+
+The following are blocked in stop-time replies. They look like honest
+disclosure but they're sandbag phrases that signal chat-loop drift. The
+Stop hook (`.claude/hooks/check_stop_sandbag.sh`) will reject the reply
+and force a rewrite if any appear:
+
+- "still not done" / "haven't audited" / "haven't verified" / "haven't fixed"
+- "needs lobby test" / "needs lobby verification" / "needs lobby observation"
+- "want me to keep going" / "should I continue/proceed/keep going"
+- "ready to test" / "ready to play" / "ready to push" / "ready to merge"
+- "boot a lobby" / "test in a lobby" / "test it now" / "test and tell me"
+- "sim 64/64 green" / "all checks pass" / "all tests pass" (when leading
+  with this on a behavior-bug report)
+- Opening with "fair", "right", "got it", "alright", "ok", "gotcha"
+- "let me commit" / "committing now" / "pushed [state of...]" mid-task
+
+The override is to actually finish the work. The hook is not gameable.
+
+### Finished-state contract (mechanically enforced via PreToolUse hooks)
+
+**Every commit must include a `## Trace` or `Trace:` section** describing
+the concrete scenario walked through the code, what gate fires/doesn't,
+and what changes behaviorally. The commit-trace hook
+(`.claude/hooks/check_commit_trace.sh`) blocks commits without it.
+Exception: `chore:` / `docs:` / `trivial:` / `typo:` prefixes for
+non-code changes.
+
+**Every `git push` requires the `.claude/work-complete` marker file.** The
+push-gate hook (`.claude/hooks/check_push_marker.sh`) blocks pushes when
+the marker is absent. The marker is auto-deleted on successful push, so
+each batch must explicitly re-create it.
+
+The workflow is:
+  1. User defines a batch of work.
+  2. Do all of it. No mid-batch commits-and-pushes for "checkpoints."
+  3. When done, write a one-line summary to `.claude/work-complete`.
+  4. Push.
+
+If you're tempted to push partial work — stop. Keep doing the work.
+
+### Frustration response (mechanically enforced via UserPromptSubmit hook)
+
+When the user uses frustration markers ("FINISH", "lazy", "do better",
+"shitty", "FFS", etc.), the UserPromptSubmit hook
+(`.claude/hooks/inject_discipline_on_frustration.sh`) injects this
+discipline reminder into context before your prompt. You don't need
+to remember it manually — it auto-injects. But knowing it auto-injects
+means: when the user is angry, the discipline rules are already
+re-loaded, so you have NO excuse to drift.
+
 ## Common Tasks
 
 ### Check for New Patches
