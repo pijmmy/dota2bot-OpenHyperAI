@@ -571,10 +571,7 @@ function X.ConsiderPulverize()
             end
 
             if J.CanKillTarget(enemyHero, nDamage * nDuration, DAMAGE_TYPE_MAGICAL)
-            and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-            and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
-            and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
             end
@@ -586,10 +583,7 @@ function X.ConsiderPulverize()
         and J.IsInRange(bot, botTarget, nCastRange * 2)
         and J.CanCastOnMagicImmune(botTarget)
         and J.CanCastOnTargetAdvanced(botTarget)
-        and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
-        and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
-        and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
-        and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             if J.IsInLaningPhase() and not J.IsInTeamFight(bot, 1600) then
                 local nAllyHeroes = J.GetAlliesNearLoc(botTarget:GetLocation(), 800)

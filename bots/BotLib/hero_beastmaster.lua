@@ -677,10 +677,7 @@ function X.ConsiderPrimalRoar()
             and bot:IsFacingLocation(enemyHero:GetLocation(), 30)
             and not enemyHero:IsFacingLocation(bot:GetLocation(), 30)
             and not WildAxes:IsFullyCastable()
-            and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-            and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-            and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
-            and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
             end
