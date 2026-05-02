@@ -207,7 +207,7 @@ function X.ConsiderChargeOfDarkness()
             and not J.IsDisabled(enemyHero)
             and not J.IsLocationInChrono(enemyHero:GetLocation())
             and not enemyHero:HasModifier('modifier_legion_commander_duel')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, false, BOT_MODE_NONE)
@@ -442,11 +442,7 @@ function X.ConsiderNetherStrike()
 
             if J.CanKillTarget(enemyHero, nDamage, DAMAGE_TYPE_MAGICAL)
             and not J.IsSuspiciousIllusion(enemyHero)
-            and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-            and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
-            and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
-            and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
             end
@@ -467,7 +463,7 @@ function X.ConsiderNetherStrike()
             and not J.IsDisabled(enemyHero)
             and not J.IsLocationInChrono(enemyHero:GetLocation())
             and not enemyHero:HasModifier('modifier_legion_commander_duel')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, false, BOT_MODE_NONE)

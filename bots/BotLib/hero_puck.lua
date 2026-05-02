@@ -721,10 +721,7 @@ function X.ConsiderDreamCoil()
         and not J.IsDisabled(strongestTarget)
         and not J.IsLocationInChrono(strongestTarget:GetLocation())
         and not J.IsLocationInBlackHole(strongestTarget:GetLocation())
-        and not strongestTarget:HasModifier('modifier_abaddon_borrowed_time')
-        and not strongestTarget:HasModifier('modifier_dazzle_shallow_grave')
-        and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
-        and not strongestTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(strongestTarget)
 		then
 			local nTargetInRangeAlly = J.GetNearbyHeroes(bot,1000, false, BOT_MODE_NONE)
 
