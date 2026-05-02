@@ -861,9 +861,10 @@ function X.ConsiderSupernova()
                     end
                 end
             else
-                if not (#nInRangeAlly >= #nInRangeEnemy + 2) then
-                    return BOT_ACTION_DESIRE_HIGH, nil, false
-                end
+                -- Dropped over-cautious "+2 advantage" guard (Doom pattern).
+                -- Already inside `IsInTeamFight + 2+ enemies in range`;
+                -- Supernova is a high-impact teamfight ult and should fire.
+                return BOT_ACTION_DESIRE_HIGH, nil, false
             end
         end
 	end

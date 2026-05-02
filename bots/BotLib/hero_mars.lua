@@ -602,9 +602,11 @@ function X.ConsiderArenaOfBlood()
 			local nInRangeAlly = bot:GetNearbyHeroes(1200, false, BOT_MODE_NONE)
 			local nInRangeEnemy = bot:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
 
+			-- Dropped over-cautious "+2 advantage" guard (Doom pattern).
+			-- Arena of Blood is kill-securing; if we can deal lethal damage
+			-- in the duration, numerical advantage shouldn't block.
 			if  nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 			and #nInRangeAlly >= #nInRangeEnemy
-			and not (#nInRangeAlly >= #nInRangeEnemy + 2)
 			and bot:GetEstimatedDamageToTarget(true, botTarget, nDuration, DAMAGE_TYPE_ALL) >= botTarget:GetHealth()
 			then
 				return BOT_ACTION_DESIRE_HIGH, J.Site.GetXUnitsTowardsLocation(bot, botTarget:GetLocation(), nCastRange)
