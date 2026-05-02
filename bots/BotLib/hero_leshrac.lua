@@ -433,6 +433,7 @@ function X.ConsiderSplitEarth()
                 and not J.IsTaunted(enemyHero)
                 and not J.IsSuspiciousIllusion(enemyHero)
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 and not enemyHero:HasModifier('modifier_leshrac_lightning_storm_slow')
                 then
                     return BOT_ACTION_DESIRE_HIGH, enemyHero:GetExtrapolatedLocation(nDelay + nCastPoint)
@@ -463,6 +464,7 @@ function X.ConsiderDiabolicEdict()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -740,6 +742,7 @@ function X.ConsiderLightningStorm()
                 and not J.IsTaunted(enemyHero)
                 and not J.IsSuspiciousIllusion(enemyHero)
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     return BOT_ACTION_DESIRE_HIGH, enemyHero
                 end
@@ -797,6 +800,7 @@ function X.ConsiderPulseNova()
                     and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
                     and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
                     and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+                    and not J.HasDamageImmunityModifier(botTarget)
                     and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')))
             then
                 if PulseNova:GetToggleState() == false

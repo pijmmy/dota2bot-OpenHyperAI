@@ -643,6 +643,7 @@ function X.ConsiderW()
 		if J.IsValidHero( npcAlly )
 			and J.IsInRange( bot, npcAlly, nCastRange + 600 )
 			and not npcAlly:HasModifier( 'modifier_dazzle_shallow_grave' )
+			and not J.HasDamageImmunityModifier(npcAlly)
 			and J.GetHP( npcAlly ) < 0.4
 			and npcAlly:WasRecentlyDamagedByAnyHero( 3.5 )
 		then

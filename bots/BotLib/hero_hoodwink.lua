@@ -251,6 +251,7 @@ function X.ConsiderAcornShot()
         and not J.IsSuspiciousIllusion(botTarget)
 		and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
         and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -333,6 +334,7 @@ function X.ConsiderBushwhack()
                 and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
                 and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     local nDelay = (GetUnitToUnitDistance(bot, enemyHero) / nSpeed) + nCastPoint
                     return BOT_ACTION_DESIRE_HIGH, enemyHero:GetExtrapolatedLocation(nDelay)
@@ -525,6 +527,7 @@ function X.ConsiderSharpshooter()
             and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
 			then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero:GetLocation()
 			end
@@ -561,6 +564,7 @@ function X.ConsiderHuntersBoomerang()
                 and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
                 and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and GetUnitToLocationDistance(enemyHero, nLocationAoE.targetloc) <= nRadius
                 then

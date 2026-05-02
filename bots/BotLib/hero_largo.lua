@@ -375,6 +375,7 @@ function X.ConsiderCatchLick()
         and J.IsChasingTarget(bot, botTarget)
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget
 		end
@@ -459,6 +460,7 @@ function X.ConsiderFrogstomp()
 		and J.IsInRange(bot, botTarget, nCastRange)
 		and J.CanCastOnNonMagicImmune(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             if J.IsDisabled(botTarget)
             or botTarget:GetCurrentMovementSpeed() <= 250
@@ -564,6 +566,7 @@ function X.ConsiderCroakOfGenius()
         and not allyHero:IsSilenced()
         and not allyHero:HasModifier('modifier_doom_bringer_doom_aura_enemy')
         and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(allyHero)
         and not allyHero:HasModifier('modifier_largo_croak_of_genius_buff')
         and not allyHero:HasModifier('modifier_silencer_curse_of_the_silent')
         and not allyHero:HasModifier('modifier_teleporting')
@@ -634,6 +637,7 @@ function X.ConsiderAmphibianRhapsody()
         and J.IsInRange(bot, allyHero, nRadius)
         and not allyHero:IsIllusion()
         and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(allyHero)
         and not allyHero:HasModifier('modifier_teleporting')
         then
             local allyHeroHp = J.GetHP(allyHero)

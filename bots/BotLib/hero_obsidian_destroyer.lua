@@ -153,6 +153,7 @@ function X.ConsiderArcaneOrb()
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(weakestTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(weakestTarget, 800, false, BOT_MODE_NONE)
 
@@ -398,6 +399,7 @@ function X.ConsiderAstralImprisonment()
                 and not allyHero:HasModifier('modifier_abaddon_borrowed_time')
                 and not allyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not allyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(allyHero)
                 then
                     return BOT_ACTION_DESIRE_HIGH, allyHero
                 end
@@ -466,6 +468,7 @@ function X.ConsiderSanitysEclipse()
             and not enemyHero:HasModifier('modifier_legion_commander_duel')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, false, BOT_MODE_NONE)
                 local nManaDiff = math.abs(bot:GetMana() - enemyHero:GetMana())

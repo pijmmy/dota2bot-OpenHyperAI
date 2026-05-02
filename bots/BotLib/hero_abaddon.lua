@@ -218,7 +218,8 @@ function X.ConsiderMistCoil()
 
     if J.IsGoingOnSomeone(bot) then
         if J.IsValidHero(botTarget)
-        and J.CanCastOnMagicImmune(botTarget) then
+        and J.CanCastOnMagicImmune(botTarget)
+        and not J.HasDamageImmunityModifier(botTarget) then
             return BOT_ACTION_DESIRE_HIGH, botTarget
         end
     end
@@ -315,9 +316,7 @@ function X.ConsiderMistCoil()
         and J.CanCastOnMagicImmune(enemyHero)
         and not J.IsSuspiciousIllusion(enemyHero)
         and J.CanKillTarget(enemyHero, nDamage, nDamageType)
-        and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-        and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
-        and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             return BOT_ACTION_DESIRE_HIGH, enemyHero
         end
@@ -466,6 +465,7 @@ function X.ConsiderAphoticShield()
         and not J.IsDisabled(nInRangeEnemy[1])
         and not bot:HasModifier('modifier_abaddon_aphotic_shield')
         and not bot:HasModifier("modifier_abaddon_borrowed_time")
+        and not J.HasDamageImmunityModifier(bot)
         then
             return BOT_ACTION_DESIRE_MODERATE, bot
         end

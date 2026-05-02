@@ -280,6 +280,7 @@ function X.ConsiderOnslaught()
         and not J.IsEnemyBlackHoleInLocation(botTarget:GetLocation())
         and not J.IsEnemyChronosphereInLocation(botTarget:GetLocation())
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             local tInRangeAlly = J.GetAlliesNearLoc(botTarget:GetLocation(), 1200)
             local tInRangeEnemy = J.GetEnemiesNearLoc(botTarget:GetLocation(), 1200)
@@ -428,6 +429,7 @@ function X.ConsiderTrample()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(enemyHero)
         and not enemyHero:HasModifier('modifier_item_blade_mail_reflect')
         then
             bot.trample_status = {'engaging', enemyHero:GetLocation(), enemyHero}
@@ -474,6 +476,7 @@ function X.ConsiderUproar()
         and J.IsInRange(bot, botTarget, nRadius)
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             if nStacks >= 4
             or J.IsChasingTarget(bot, botTarget) and nStacks >= 2
@@ -532,6 +535,7 @@ function X.ConsiderRockThrow()
             and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, J.GetCorrectLoc(enemyHero, nCastPoint + nMaxTime)
             end

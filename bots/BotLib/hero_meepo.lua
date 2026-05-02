@@ -588,6 +588,7 @@ function X.ConsiderPoof()
             and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             and J.GetMP(bot) > 0.76
             then
                 return BOT_ACTION_DESIRE_HIGH, bot

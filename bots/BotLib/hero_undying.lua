@@ -189,6 +189,7 @@ function X.ConsiderDecay()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             local nInRangeEnemy = J.GetEnemiesNearLoc(enemyHero:GetLocation(), nRadius)
 
@@ -349,6 +350,7 @@ function X.ConsiderSoulRip()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             local nInRangeEnemy = J.GetEnemiesNearLoc(bot:GetLocation(), nRadius)
             local nCreeps = bot:GetNearbyCreeps(nRadius, true)

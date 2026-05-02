@@ -828,6 +828,7 @@ function X.ConsiderE()
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
 		and not botTarget:HasModifier('modifier_ursa_enrage')
         then

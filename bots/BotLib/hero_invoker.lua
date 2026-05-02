@@ -942,6 +942,7 @@ function X.ConsiderTornado()
         and not botTarget:HasModifier('modifier_eul_cyclone')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_invoker_chaos_meteor_burn')
         and not botTarget:HasModifier('modifier_invoker_deafening_blast_disarm')
 		then
@@ -1094,6 +1095,7 @@ function X.ConsiderAlacrity()
         and not botTarget:HasModifier('modifier_brewmaster_storm_cyclone')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             if J.IsInRange(suitableTarget, botTarget, nCastRange)
             and ((nEnemyHeroes ~= nil and #nEnemyHeroes >=2 and not X.CanAbilityPossiblyBeCasted(ChaosMeteor)) -- 如果附近多人, 优先考虑陨石
@@ -1191,6 +1193,7 @@ function X.ConsiderCmToTarget(target, nDelay, nTravelDistance, nRadius)
     and not J.IsSuspiciousIllusion(target)
     and (not isInLaningPhase or (isInLaningPhase and J.GetManaAfter(ChaosMeteor:GetManaCost()) > 0.5) or J.GetHP(target) < 0.5)
     and not target:HasModifier('modifier_abaddon_borrowed_time')
+    and not J.HasDamageImmunityModifier(target)
     and (J.GetHP(target) <= 0.9 and J.GetHP(target) > 0.15) or target:GetMovementDirectionStability() >= 0.75
     then
         -- if hero is under temp damage immute control
@@ -1422,6 +1425,7 @@ function X.ConsiderCataclysm_()
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
         and not botTarget:HasModifier('modifier_item_aeon_disk_buff')
+        and not J.HasDamageImmunityModifier(botTarget)
         and (X.IsUnderLongDurationStun(botTarget)
             or botTarget:IsStunned()
             or botTarget:IsRooted())
@@ -1538,6 +1542,7 @@ function X.ConsiderSunstrike()
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
             and not enemyHero:HasModifier('modifier_item_aeon_disk_buff')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 if nDamage > enemyHero:GetHealth() then
                     -- 残血tp

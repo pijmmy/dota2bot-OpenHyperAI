@@ -272,6 +272,7 @@ function X.ConsiderVoid()
                 and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and not botTarget:HasModifier('modifier_legion_commander_duel')
                 and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(botTarget)
                 then
                     return BOT_ACTION_DESIRE_HIGH, botTarget:GetExtrapolatedLocation(nCastPoint)
                 else
@@ -553,6 +554,7 @@ function X.ConsiderDarkAscension()
         and not botTarget:HasModifier('modifier_legion_commander_duel')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 800, false, BOT_MODE_NONE)
 

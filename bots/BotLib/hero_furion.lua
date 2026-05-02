@@ -283,6 +283,7 @@ function X.ConsiderSprout()
             and not target:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not target:HasModifier('modifier_legion_commander_duel')
             and not target:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(target)
     end
 
     -- Teamfight: target highest-threat enemy
@@ -488,6 +489,7 @@ function X.ConsiderNaturesCall()
         and J.CanBeAttacked(botTarget)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze') then
             return BOT_ACTION_DESIRE_HIGH, nInRangeTrees[1]
         end
@@ -583,6 +585,7 @@ function X.ConsiderWrathOfNature()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer') then
             return BOT_ACTION_DESIRE_HIGH, botTarget
         end

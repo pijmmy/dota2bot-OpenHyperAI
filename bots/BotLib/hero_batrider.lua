@@ -271,6 +271,7 @@ function X.ConsiderStickyNapalm()
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 800, false, BOT_MODE_NONE)
 
@@ -434,6 +435,7 @@ function X.ConsiderFlamebreak()
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_legion_commander_duel')
@@ -581,6 +583,7 @@ function X.ConsiderFirefly()
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 800, false, BOT_MODE_NONE)
 
@@ -686,6 +689,7 @@ function X.ConsiderBlinkLasso()
             and not strongestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not strongestTarget:HasModifier('modifier_legion_commander_duel')
             and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(strongestTarget)
             then
                 local nTargetInRangeAlly = J.GetNearbyHeroes(strongestTarget, 1199, false, BOT_MODE_NONE)
 

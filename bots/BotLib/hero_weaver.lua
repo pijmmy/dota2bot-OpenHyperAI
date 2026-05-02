@@ -151,6 +151,7 @@ function X.ConsiderTheSwarm()
         and J.IsInRange(bot, botTarget, nCastRange * 0.8)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -295,6 +296,7 @@ function X.ConsiderShukuchi()
         and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH
 		end
@@ -512,6 +514,7 @@ function X.ConsiderTimeLapse()
             and not J.IsSuspiciousIllusion(allyHero)
             and not allyHero:HasModifier('modifier_legion_commander_duel')
             and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(allyHero)
 			then
                 local nInRangeEnemy = J.GetNearbyHeroes(allyHero, 1200, true, BOT_MODE_NONE)
                 for _, enemyHero in pairs(nInRangeEnemy)

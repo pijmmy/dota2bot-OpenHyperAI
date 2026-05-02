@@ -327,6 +327,7 @@ function X.ConsiderShackleShot()
                 and not enemyHero:HasModifier('modifier_enigma_black_hole_pull')
                 and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     local target = X.GetShackleTarget(bot, enemyHero, nRadius, nAngle)
                     if target ~= nil
@@ -385,6 +386,7 @@ function X.ConsiderPowershot()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             local eta = (GetUnitToUnitDistance(bot, botTarget) / nSpeed) + nCastPoint
 
@@ -529,6 +531,7 @@ function X.ConsiderWindrun()
         and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             if (J.IsChasingTarget(bot, botTarget)
                 and not J.IsInRange(bot, botTarget, bot:GetAttackRange())
@@ -649,6 +652,7 @@ function X.ConsiderFocusFire()
             and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_item_aeon_disk_buff')
+            and not J.HasDamageImmunityModifier(enemyHero)
             and not enemyHero:HasModifier('modifier_item_blade_mail_reflect')
             then
                 bot:SetTarget(enemyHero)
