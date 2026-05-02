@@ -360,9 +360,9 @@ function X.ConsiderPitOfMalice()
         local nInRangeAlly = J.GetNearbyHeroes(bot,1200, false, BOT_MODE_NONE)
         local nInRangeEnemy = J.GetEnemiesNearLoc(nLocationAoE.targetloc, nRadius)
 
+		-- Dropped over-cautious "+1 advantage" guard (Doom-class pattern).
 		if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
         and #nInRangeEnemy >= 1
-        and not (#nInRangeAlly > #nInRangeEnemy + 1)
 		then
 			return BOT_ACTION_DESIRE_HIGH, nLocationAoE.targetloc
 		end
