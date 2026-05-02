@@ -695,7 +695,7 @@ function X.ConsiderDarkPortrait()
         and not J.IsDisabled(strongestTarget)
         and not strongestTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not strongestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
-        and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(strongestTarget)
         then
             local nInRangeAlly = bot:GetNearbyHeroes(1600, true, BOT_MODE_NONE)
             local nInRangeEnemy = bot:GetNearbyHeroes(1600, false, BOT_MODE_NONE)

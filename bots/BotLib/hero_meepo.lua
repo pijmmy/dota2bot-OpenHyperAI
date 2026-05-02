@@ -755,6 +755,7 @@ function X.ConsiderMegaMeepoFling()
         and bot:WasRecentlyDamagedByAnyHero(3.1)
         and not J.IsMeepoClone(bot)
         and not weakestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
+        and not J.HasDamageImmunityModifier(weakestTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy
         and #nInRangeAlly >= #nInRangeEnemy
         then

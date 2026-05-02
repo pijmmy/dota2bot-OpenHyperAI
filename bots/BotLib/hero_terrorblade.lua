@@ -375,6 +375,7 @@ function X.ConsiderSunder()
 	if J.GetHP(bot) < 0.35
 	and nSunderTarget ~= nil
 	and not J.IsSuspiciousIllusion(nSunderTarget)
+	and not J.HasDamageImmunityModifier(nSunderTarget)
 	then
 		return BOT_ACTION_DESIRE_HIGH, nSunderTarget
 	end

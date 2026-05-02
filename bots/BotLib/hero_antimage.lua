@@ -434,9 +434,7 @@ function X.ConsiderManaVoid()
 				and not J.IsHaveAegis(enemyHero)
 				and not J.IsSuspiciousIllusion(enemyHero)
 				and not enemyHero:HasModifier('modifier_arc_warden_tempest_double')
-				and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-				and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
-				and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
+				and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				nCastTarget = enemyHero
 				break
@@ -466,9 +464,7 @@ function X.ConsiderManaVoid()
 		and not J.IsHaveAegis(botTarget)
 		and not J.IsSuspiciousIllusion(botTarget)
 		and not botTarget:HasModifier('modifier_arc_warden_tempest_double')
-		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
-		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
-		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
 			local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
