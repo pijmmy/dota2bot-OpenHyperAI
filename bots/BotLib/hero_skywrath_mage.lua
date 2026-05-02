@@ -650,6 +650,7 @@ function X.ConsiderR()
 	then
 		if J.IsValidHero( botTarget )
 			and J.CanCastOnNonMagicImmune( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 			and J.IsInRange( bot, botTarget, nCastRange + 200 )
 		then
 			if ( not J.IsRunning( botTarget ) and not J.IsMoving( botTarget ) )
@@ -668,6 +669,7 @@ function X.ConsiderR()
 			if J.IsValid( npcEnemy )
 				and bot:WasRecentlyDamagedByHero( npcEnemy, 3.1 )
 				and J.CanCastOnNonMagicImmune( npcEnemy )
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				return BOT_ACTION_DESIRE_HIGH, J.GetFaceTowardDistanceLocation( npcEnemy, 168 ), 'R撤退'
 			end
