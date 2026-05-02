@@ -3336,6 +3336,26 @@ function J.IsKeyWordUnit( keyWord, uUnit )
 end
 
 
+-- Damage-immunity / heal-on-damage modifiers — common blacklist for
+-- single-target nuke / execute ults. Casting into any of these wastes
+-- the ult (Borrowed Time HEALS, Reaper's Scythe / Shallow Grave / False
+-- Promise / Refraction absorb, Reincarnation revives).
+--
+-- Use as: `if J.HasDamageImmunityModifier(target) then skip end`
+-- Replaces the 6-line inline list previously copy-pasted across hero
+-- files.
+function J.HasDamageImmunityModifier( target )
+	if target == nil then return false end
+	return target:HasModifier( 'modifier_abaddon_borrowed_time' )
+		or target:HasModifier( 'modifier_dazzle_shallow_grave' )
+		or target:HasModifier( 'modifier_necrolyte_reapers_scythe' )
+		or target:HasModifier( 'modifier_oracle_false_promise_timer' )
+		or target:HasModifier( 'modifier_templar_assassin_refraction_absorb' )
+		or target:HasModifier( 'modifier_skeleton_king_reincarnation_scepter_active' )
+		or target:HasModifier( 'modifier_item_aeon_disk_buff' )
+end
+
+
 function J.IsHumanPlayer( nUnit )
 
 	return not nUnit:IsBot() -- or IsPlayerBot( nUnit:GetPlayerID() )

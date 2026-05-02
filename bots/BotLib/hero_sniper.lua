@@ -501,6 +501,7 @@ function X.ConsiderR()
 	local castRTarget = nil
 
 	if J.IsValid( nWeakestEnemyHeroInCastRange )
+		and not J.HasDamageImmunityModifier( nWeakestEnemyHeroInCastRange )
 		and ( J.WillMagicKillTarget( bot, nWeakestEnemyHeroInCastRange, nDamage, nCastPoint )
 			or ( X.ShouldUseR( nTempTarget, nWeakestEnemyHeroInCastRange, nDamage ) and ( bot:GetMana() > nKeepMana * 1.28 or bot:HasScepter() ) ) )
 	then

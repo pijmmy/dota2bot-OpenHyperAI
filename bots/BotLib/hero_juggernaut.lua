@@ -450,21 +450,22 @@ function X.ConsiderR()
 			if J.IsValid( npcEnemy )
 				and J.CanCastOnNonMagicImmune( npcEnemy )
 				and J.CanCastOnTargetAdvanced( npcEnemy )
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				hCastTarget = npcEnemy
 				sCastMotive = 'R-防御:'..J.Chat.GetNormName( hCastTarget )
 				return BOT_ACTION_DESIRE_HIGH, hCastTarget, sCastMotive
 			end
-		end	
+		end
 	end
-	
-	
+
+
 	--攻击敌人时
 	if J.IsGoingOnSomeone( bot )
 	then
 		if J.IsValidHero( botTarget )
 			and J.IsInRange( botTarget, bot, 900 )
-			and ( botTarget:GetHealth() > bot:GetAttackDamage() * 4 
+			and ( botTarget:GetHealth() > bot:GetAttackDamage() * 4
 					or nHP < 0.2
 					or #nInBonusEnemyList >= 2 )
 		then
@@ -473,6 +474,7 @@ function X.ConsiderR()
 				if J.IsValid( npcEnemy )
 					and J.CanCastOnNonMagicImmune( npcEnemy )
 					and J.CanCastOnTargetAdvanced( npcEnemy )
+					and not J.HasDamageImmunityModifier( npcEnemy )
 				then
 					hCastTarget = npcEnemy
 					sCastMotive = 'R-攻击:'..J.Chat.GetNormName( hCastTarget )

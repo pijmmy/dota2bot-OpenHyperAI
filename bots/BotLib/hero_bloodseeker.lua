@@ -481,6 +481,7 @@ function X.ConsiderR()
 				and J.CanCastOnTargetAdvanced( npcEnemy )
 				and not npcEnemy:HasModifier( 'modifier_bloodseeker_bloodrage' )
 				and not npcEnemy:HasModifier('modifier_bloodseeker_rupture')
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				return BOT_ACTION_DESIRE_MODERATE, npcEnemy
 			end
@@ -497,6 +498,7 @@ function X.ConsiderR()
 				and not npcEnemy:HasModifier( 'modifier_bloodseeker_bloodrage' )
 				and not npcEnemy:HasModifier('modifier_bloodseeker_rupture')
 				and not J.IsDisabled( npcEnemy )
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				return BOT_ACTION_DESIRE_HIGH, npcEnemy
 			end
@@ -512,6 +514,7 @@ function X.ConsiderR()
 			and not botTarget:HasModifier( 'modifier_bloodseeker_bloodrage' )
 			and not botTarget:HasModifier('modifier_bloodseeker_rupture')
 			and not J.IsDisabled( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 		then
 			local allies = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE )
 			if ( allies ~= nil and #allies >= 2 )

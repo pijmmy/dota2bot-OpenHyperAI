@@ -485,6 +485,7 @@ function X.ConsiderR()
 			and not botTarget:IsInvulnerable()
 			and not J.IsSuspiciousIllusion( botTarget )
 			and not J.HasForbiddenModifier( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 			and J.IsInRange( bot, botTarget, nCastRange + 100 )
 		then
 			local attackDamage = botTarget:GetActualIncomingDamage( nDamage, nDamageType )

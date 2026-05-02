@@ -748,6 +748,7 @@ function X.ConsiderR()
 		if J.IsValid( npcEnemy )
 			and J.CanCastOnNonMagicImmune( npcEnemy )
 			and J.CanCastOnTargetAdvanced( npcEnemy )
+			and not J.HasDamageImmunityModifier( npcEnemy )
 		then
 			if npcEnemy:IsChanneling()
 			then
@@ -784,6 +785,7 @@ function X.ConsiderR()
 				and J.CanCastOnNonMagicImmune( npcEnemy )
 				and J.CanCastOnTargetAdvanced( npcEnemy )
 				and not J.IsDisabled( npcEnemy )
+				and not J.HasDamageImmunityModifier( npcEnemy )
 			then
 				local npcEnemyPower = npcEnemy:GetEstimatedDamageToTarget( true, bot, 6.0, DAMAGE_TYPE_ALL )
 				if ( npcEnemyPower > nStrongestPower )
@@ -811,6 +813,7 @@ function X.ConsiderR()
 			and J.IsInRange( botTarget, bot, nCastRange + 50 )
 			and J.CanCastOnNonMagicImmune( botTarget )
 			and J.CanCastOnTargetAdvanced( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 		then
 			hCastTarget = botTarget
 			sCastMotive = 'R-攻击'..J.Chat.GetNormName( hCastTarget )
