@@ -661,8 +661,10 @@ function X.ConsiderEchoSlam()
                     end
                 end
 
+                -- Dropped over-cautious "+2 advantage" guard (Doom pattern).
+                -- Echo Slam is at its best in 5-man pushes; the previous gate
+                -- skipped it whenever we had a 2-hero numbers lead.
                 if #nInRangeAlly >= #nInRangeEnemy
-                and not (#nInRangeAlly >= #nInRangeEnemy + 2)
                 then
                     return BOT_ACTION_DESIRE_HIGH
                 end

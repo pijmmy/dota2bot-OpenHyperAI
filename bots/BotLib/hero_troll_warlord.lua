@@ -715,9 +715,11 @@ function X.ConsiderBattleTrance()
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
             local nDamage = bot:GetEstimatedDamageToTarget(false, botTarget, nDuration, DAMAGE_TYPE_PHYSICAL)
 
+            -- Dropped over-cautious "+2 advantage" guard (Doom pattern).
+            -- Battle Trance is kill-securing; if we can kill the target with
+            -- the duration's damage, numerical advantage shouldn't block.
             if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
             and #nInRangeAlly >= #nInRangeEnemy
-            and not (#nInRangeAlly >= #nInRangeEnemy + 2)
             and nDamage >= botTarget:GetHealth()
             then
                 return BOT_ACTION_DESIRE_HIGH

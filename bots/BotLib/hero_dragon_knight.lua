@@ -725,15 +725,15 @@ function X.ConsiderElderDragonForm()
 		and J.CanBeAttacked(botTarget)
 		and not J.IsSuspiciousIllusion(botTarget)
 		then
-			local nInRangeAlly = J.GetAlliesNearLoc(bot:GetLocation(), 1200)
+			-- Dropped over-cautious "+2 advantage" guard (same pattern as Doom).
+			-- DK Elder Dragon Form is most valuable mid-fight; saving it for
+			-- close fights only meant the bot skipped it during winning pushes.
 			local nInRangeEnemy = J.GetEnemiesNearLoc(bot:GetLocation(), 1200)
-			if not (#nInRangeAlly >= #nInRangeEnemy + 2) then
-				if #nInRangeEnemy >= 2 then
+			if #nInRangeEnemy >= 2 then
+				return BOT_ACTION_DESIRE_HIGH
+			else
+				if not botTarget:HasModifier('modifier_necrolyte_reapers_scythe') then
 					return BOT_ACTION_DESIRE_HIGH
-				else
-					if not botTarget:HasModifier('modifier_necrolyte_reapers_scythe') then
-						return BOT_ACTION_DESIRE_HIGH
-					end
 				end
 			end
 		end
