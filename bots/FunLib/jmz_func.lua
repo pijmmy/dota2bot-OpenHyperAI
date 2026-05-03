@@ -1,5 +1,24 @@
 local J = {}
 
+-- Circular-require defense. Without this, any module that does
+-- `local jmz = require(".../FunLib/jmz_func")` at top level WHILE BEING
+-- LOADED BY jmz_func itself (i.e. via one of the requires below) gets
+-- back Lua's circular-require sentinel (boolean `true`) instead of the
+-- J table. Per-tick `jmz.X(...)` calls then crash with "attempt to index
+-- a boolean", flooding error logs synchronously on Dota's main thread
+-- and starving input event processing — the symptom the user observed
+-- as broken mouse / mini-map / shop after commit 2f50da1.
+--
+-- By writing the J reference into package.loaded BEFORE the downstream
+-- requires fire, recursive requires of jmz_func get the partial-but-
+-- mutable J table. As jmz_func continues loading and assigns J.Func = ...,
+-- the recursively-loaded module's local jmz holds the same table identity
+-- and sees the new fields by the time runtime calls happen.
+--
+-- Standard Lua circular-require workaround. Keep this above every
+-- require() in this file.
+package.loaded[GetScriptDirectory()..'/FunLib/jmz_func'] = J
+
 local bDebugMode = ( 1 == 10 )
 local tAllyIDList = GetTeamPlayers( GetTeam() )
 local tAllyHeroList = {}
