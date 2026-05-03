@@ -18,6 +18,18 @@ TESTS = [
     "test_roshan_pit.py",
     "test_stun_chain.py",
     "test_team_plan_logic.py",
+    "test_ward_utility.py",
+    "test_focus.py",
+    "test_save.py",
+    "test_enemy_focus.py",
+    "test_synthetic_pings.py",
+    "test_deward.py",
+    "test_personality.py",
+    "test_draft_strategy.py",
+    "test_gametheory.py",
+    "test_commitment.py",
+    "test_archetype_affinity.py",
+    "test_teamplan_helpers.py",
 ]
 
 def main():
