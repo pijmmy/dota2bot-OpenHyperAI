@@ -18,9 +18,9 @@ function GetDesire()
 			local plan = J.TeamPlan.GetCurrentPlan()
 			if plan ~= nil then
 				if plan.intent == "defend_lane" and plan.lane == LANE_MID then
-					raw = math.max(raw, 0.85)
+					raw = math.max(raw, 0.95)
 				elseif plan.intent == "defend_base" then
-					raw = math.max(raw, 0.80)
+					raw = math.max(raw, 0.90)
 				end
 			end
 		end

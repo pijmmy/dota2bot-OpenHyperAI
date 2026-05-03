@@ -226,6 +226,16 @@ local function getLaneTier(team, lane)
     return 4
 end
 
+-- Returns count of enemy heroes last seen within `radius` of `loc` in the
+-- last 5 seconds. Catches enemies that just dropped vision (smoke / behind
+-- creep wave / fog of war) — exactly the HG-push pattern.
+local function countLastSeenEnemyHeroesNear(loc, radius)
+    local J = jmz()
+    local ok, list = pcall(function() return J.GetLastSeenEnemiesNearLoc(loc, radius) end)
+    if not ok or list == nil then return 0 end
+    return #list
+end
+
 local function findThreatenedLane(team)
     -- Tier-aware threat detection.
     --
@@ -235,14 +245,15 @@ local function findThreatenedLane(team)
     -- chips down, no enemy heroes visible to bots, threat < 2, defend
     -- never fires. User: "bots dont defend high ground."
     --
-    -- New gate splits by tier of the front-line building:
-    --   T1 / T2: same as before (>=2 visible-enemy threat). Avoids
-    --       over-defending early when one scout is roaming our lane.
-    --   T3:     fires on >=1 visible enemy OR damaged-in-last-5s
-    --       (HG is high-stakes; chip damage with no vision is exactly
-    --       how teams take HG and it must be respected).
-    --   Rax:    ANY damage in last 5s OR HP<100%. We are never letting
-    --       a rax die to invisible attackers.
+    -- v2 added tier-awareness but still relied on visible-only enemies
+    -- (countEnemyHeroesNear) and hero-only damage (WasRecentlyDamagedByAnyHero).
+    -- HG sieges typically start with creeps eating tower while heroes
+    -- stay in fog. Both signals miss this. After lobby observation:
+    -- "bots dont defend high ground" — same complaint.
+    --
+    -- v3 (this version): for HG (tier >= 3), use last-seen enemies (5s
+    -- window) AND check WasRecentlyDamagedByCreep. Now creep-only
+    -- damage to T3/rax with all heroes in fog still triggers defense.
     local lanes = { LANE_TOP, LANE_MID, LANE_BOT }
     local bestLane = nil
     local bestLoc = nil
@@ -252,34 +263,47 @@ local function findThreatenedLane(team)
         local building = findFurthestAliveLaneBuilding(team, lane)
         if building ~= nil then
             local loc = building:GetLocation()
-            local enemiesNear = countEnemyHeroesNear(loc, 1600)
+            local visibleEnemies = countEnemyHeroesNear(loc, 1600)
             local hpPct = building:GetHealth() / math.max(1, building:GetMaxHealth())
             local recentlyHit = hpPct < 0.9
-            local okDmg, recentDmg = pcall(function()
+
+            -- Hero damage signal (live, doesn't require current vision).
+            local okHeroDmg, heroDmg = pcall(function()
                 return building:WasRecentlyDamagedByAnyHero(5.0)
             end)
-            local damagedRecently = (okDmg and recentDmg) or false
+            local heroDamageRecent = (okHeroDmg and heroDmg) or false
+
+            -- Creep damage signal — critical for HG sieges.
+            local okCreepDmg, creepDmg = pcall(function()
+                return building:WasRecentlyDamagedByCreep(5.0)
+            end)
+            local creepDamageRecent = (okCreepDmg and creepDmg) or false
+
+            local damagedRecently = heroDamageRecent or creepDamageRecent
             local tier = getLaneTier(team, lane)
 
-            local threat = enemiesNear + (recentlyHit and 1 or 0)
+            local threat = visibleEnemies + (recentlyHit and 1 or 0)
             local fires = false
             if tier <= 2 then
+                -- T1 / T2: keep the conservative gate — avoid
+                -- over-defending early when one scout roams our lane.
                 fires = (threat >= 2)
             elseif tier == 3 then
-                -- HG: any visible enemy near OR active damage signal.
-                -- HP threshold dropped intentionally — damagedRecently is
-                -- the LIVE signal; a stale "HP<X%" would cause permanent
-                -- defend-state once the building took any damage.
-                fires = (enemiesNear >= 1) or damagedRecently
+                -- HG: visible enemies OR last-seen enemies (fog tolerance)
+                -- OR active damage (hero or creep). Wide net intentional —
+                -- T3 falling because we missed a fog push is the user's
+                -- exact complaint.
+                local lastSeenEnemies = countLastSeenEnemyHeroesNear(loc, 1800)
+                fires = (visibleEnemies >= 1) or (lastSeenEnemies >= 1) or damagedRecently
                 if fires then
-                    -- Boost threat so HG defends beat T1/T2 chip on
-                    -- a different lane.
+                    -- Boost threat so HG defends beat T1/T2 chip on a
+                    -- different lane.
                     threat = math.max(threat, 3)
                 end
             else
-                -- Rax tier: damaged in last 5s = full alarm. Don't gate
-                -- on enemies-visible (HG enemies often push in fog).
-                fires = damagedRecently
+                -- Rax tier (T3 down): ANY damage = full alarm. Vision
+                -- gating is wrong here; rax dies to creeps + heroes in fog.
+                fires = damagedRecently or (visibleEnemies >= 1)
                 if fires then
                     threat = math.max(threat, 4)
                 end
