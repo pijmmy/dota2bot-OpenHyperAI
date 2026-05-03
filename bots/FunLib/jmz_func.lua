@@ -6477,24 +6477,34 @@ function J.GetCurrentRoshanLocation()
 
 	-- 2) Short-lived cache: trust recent sighting
 	if _lastSeenRoshanLoc ~= nil and (DotaTime() - _lastSeenRoshanTime) < _ROSHAN_SEEN_TTL then
-		-- Self-invalidation: if bots are AT the cached pit + rosh not visible,
-		-- the cache is stale (rosh has probably moved). Invalidate and fall through.
-		local ally = nil
+		-- Self-invalidation: if ANY bot is AT the cached pit + rosh not
+		-- visible (we already failed step 1), the cache is stale (rosh
+		-- has probably moved to the other pit OR was killed). Invalidate
+		-- and fall through to the alternation heuristic.
+		--
+		-- Old code only checked the FIRST alive ally's distance to the
+		-- cached pit. If pos 1 carry was alive in lane (far from pit) but
+		-- pos 4/5 were AT the pit, distance to pos 1 was huge, cache
+		-- stayed valid, supports kept being routed to wrong pit. User:
+		-- "stupid bots congregate in the wrong roshan pit."
+		--
+		-- New code uses the closest ally's distance to the cached pit —
+		-- if anyone on the team is near the cache and Rosh isn't visible,
+		-- the cache is dead.
+		local closestDist = math.huge
 		for i = 1, 5 do
 			local m = GetTeamMember(i)
-			if m ~= nil and m:IsAlive() then ally = m; break end
-		end
-		if ally ~= nil then
-			local distToCache = GetUnitToLocationDistance(ally, _lastSeenRoshanLoc)
-			if distToCache < 800 then
-				-- We're at the cached location but didn't see Rosh — bad cache
-				_lastSeenRoshanLoc = nil
-				_lastSeenRoshanTime = -999
-				-- Force alternate pit next time
-				_roshanPitAttempt = _roshanPitAttempt + 1
-			else
-				return _lastSeenRoshanLoc
+			if m ~= nil and m:IsAlive() then
+				local d = GetUnitToLocationDistance(m, _lastSeenRoshanLoc)
+				if d < closestDist then closestDist = d end
 			end
+		end
+		if closestDist < 800 then
+			-- A bot is at the cached pit but step 1 didn't surface Rosh.
+			-- Cache is dead.
+			_lastSeenRoshanLoc = nil
+			_lastSeenRoshanTime = -999
+			_roshanPitAttempt = _roshanPitAttempt + 1
 		else
 			return _lastSeenRoshanLoc
 		end

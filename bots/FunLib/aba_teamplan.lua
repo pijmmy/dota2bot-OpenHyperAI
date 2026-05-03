@@ -227,6 +227,22 @@ local function getLaneTier(team, lane)
 end
 
 local function findThreatenedLane(team)
+    -- Tier-aware threat detection.
+    --
+    -- Old gate: threat = visibleEnemies + (HP<90% ? 1 : 0). Required
+    -- threat >= 2 across ALL tiers. For high-ground (T3/rax) this missed
+    -- the common scenario: enemies push in fog with creeps, building
+    -- chips down, no enemy heroes visible to bots, threat < 2, defend
+    -- never fires. User: "bots dont defend high ground."
+    --
+    -- New gate splits by tier of the front-line building:
+    --   T1 / T2: same as before (>=2 visible-enemy threat). Avoids
+    --       over-defending early when one scout is roaming our lane.
+    --   T3:     fires on >=1 visible enemy OR damaged-in-last-5s
+    --       (HG is high-stakes; chip damage with no vision is exactly
+    --       how teams take HG and it must be respected).
+    --   Rax:    ANY damage in last 5s OR HP<100%. We are never letting
+    --       a rax die to invisible attackers.
     local lanes = { LANE_TOP, LANE_MID, LANE_BOT }
     local bestLane = nil
     local bestLoc = nil
@@ -237,9 +253,39 @@ local function findThreatenedLane(team)
         if building ~= nil then
             local loc = building:GetLocation()
             local enemiesNear = countEnemyHeroesNear(loc, 1600)
-            local recentlyHit = building:GetHealth() < building:GetMaxHealth() * 0.9
+            local hpPct = building:GetHealth() / math.max(1, building:GetMaxHealth())
+            local recentlyHit = hpPct < 0.9
+            local okDmg, recentDmg = pcall(function()
+                return building:WasRecentlyDamagedByAnyHero(5.0)
+            end)
+            local damagedRecently = (okDmg and recentDmg) or false
+            local tier = getLaneTier(team, lane)
+
             local threat = enemiesNear + (recentlyHit and 1 or 0)
-            if threat >= 2 and threat > bestThreat then
+            local fires = false
+            if tier <= 2 then
+                fires = (threat >= 2)
+            elseif tier == 3 then
+                -- HG: any visible enemy near OR active damage signal.
+                -- HP threshold dropped intentionally — damagedRecently is
+                -- the LIVE signal; a stale "HP<X%" would cause permanent
+                -- defend-state once the building took any damage.
+                fires = (enemiesNear >= 1) or damagedRecently
+                if fires then
+                    -- Boost threat so HG defends beat T1/T2 chip on
+                    -- a different lane.
+                    threat = math.max(threat, 3)
+                end
+            else
+                -- Rax tier: damaged in last 5s = full alarm. Don't gate
+                -- on enemies-visible (HG enemies often push in fog).
+                fires = damagedRecently
+                if fires then
+                    threat = math.max(threat, 4)
+                end
+            end
+
+            if fires and threat > bestThreat then
                 bestThreat = threat
                 bestLane = lane
                 bestLoc = loc

@@ -10,11 +10,28 @@ local second = 0
 
 local bBottle = false
 
+-- 7.33+ has FOUR bounty runes (2 in radiant jungle, 2 in dire jungle).
+-- Old code only listed RUNE_BOUNTY_1 + _2, so GetBestRune iterated half
+-- the bounty rune set — bots in lanes that mapped to bounties 3/4 got
+-- routed to a river powerup spot (which is empty at 0:00) and never
+-- picked up bounty gold. User feedback: "bounty ruins not being picked
+-- up. that is stupid. 4 and 5 should be getting them at least."
 local nRuneList = {
 	RUNE_BOUNTY_1,
 	RUNE_BOUNTY_2,
+	RUNE_BOUNTY_3,
+	RUNE_BOUNTY_4,
 	RUNE_POWERUP_1,
 	RUNE_POWERUP_2,
+}
+
+-- Pre-game bounty subset only (used to assign each pos 4/5 to a real
+-- bounty rune, not a river powerup that's empty at 0:00).
+local nBountyRuneList = {
+	RUNE_BOUNTY_1,
+	RUNE_BOUNTY_2,
+	RUNE_BOUNTY_3,
+	RUNE_BOUNTY_4,
 }
 
 local botHP, botMP, botPos, botActiveMode, botActiveModeDesire, botAssignedLane
@@ -150,17 +167,25 @@ function GetDesireInner()
 		local nProximityRadius = 1600
 		local rune = bot.rune.normal
 
-		rune.location, rune.distance = X.GetBestRune()
-
-		-- Pre-game: only supports (pos 4/5) walk for the bounty.
-		-- Old behavior was MODERATE for ALL bots → 5-man clump at the closer
-		-- bounty/ruins each game. Cores stay on lane creep.
+		-- Pre-game (DotaTime < 0): cores stay on lane, only supports walk
+		-- for bounties. Use the dedicated bounty-only picker so each support
+		-- claims one of the 4 bounty runes (closest, not-already-claimed),
+		-- avoiding the old fixed lane→bounty mapping that mis-routed pos 4
+		-- on offlane to a river powerup spot.
+		--
+		-- User feedback: "bounty ruins not being picked up. 4 and 5 should
+		-- be getting them at least."
 		if DotaTime() < 0 and not bot:WasRecentlyDamagedByAnyHero(10.0) then
 			if botPos and botPos >= 4 then
-				return BOT_MODE_DESIRE_MODERATE
+				rune.location, rune.distance = X.GetBestBountyRune()
+				if rune.location ~= -1 then
+					return BOT_MODE_DESIRE_MODERATE
+				end
 			end
 			return BOT_MODE_DESIRE_NONE
 		end
+
+		rune.location, rune.distance = X.GetBestRune()
 
 		if rune.location ~= -1 then
 			rune.type = GetRuneType(rune.location)
@@ -342,6 +367,22 @@ function Think()
 			return
 		end
 
+		-- Pre-game movement: pos 4/5 walk to their assigned bounty rune
+		-- (set by GetDesireInner pre-game branch via X.GetBestBountyRune).
+		-- Each support claims the closest unclaimed bounty rune to their
+		-- spawn — no fixed lane→rune mapping needed.
+		--
+		-- Cores fall through to the lane-based pre-positioning below
+		-- (their rune mode desire was NONE pre-game so they only reach
+		-- this Think when their rune mode somehow won — keep the legacy
+		-- mapping as a safe fallback).
+		if bot.rune and bot.rune.normal and bot.rune.normal.location ~= nil
+		   and bot.rune.normal.location ~= -1 then
+			local vRuneLoc = GetRuneSpawnLocation(bot.rune.normal.location)
+			bot:Action_MoveToLocation(vRuneLoc + RandomVector(50))
+			return
+		end
+
 		if GetTeam() == TEAM_RADIANT then
 			if botAssignedLane == LANE_BOT then
 				bot:Action_MoveToLocation(GetRuneSpawnLocation(RUNE_BOUNTY_2) + RandomVector(50))
@@ -501,7 +542,8 @@ function X.GetBestRune()
 		and not IsHumanClaimingRune(rune)
 		and not X.IsMissing(rune)
 		then
-			if (rune == RUNE_BOUNTY_1 or rune == RUNE_BOUNTY_2)
+			if (rune == RUNE_BOUNTY_1 or rune == RUNE_BOUNTY_2
+				or rune == RUNE_BOUNTY_3 or rune == RUNE_BOUNTY_4)
 			or (J.IsCore(bot) or not J.IsThereCoreNearby(1200))
 			then
 				local dist = GetUnitToLocationDistance(bot, vRuneLocation)
@@ -509,6 +551,40 @@ function X.GetBestRune()
 					targetRune = rune
 					targetRuneDistance = dist
 				end
+			end
+		end
+	end
+
+	return targetRune, targetRuneDistance
+end
+
+--------------------------------------------------------------------
+-- GetBestBountyRune  (pre-game bounty-only picker)
+--
+-- Picks the closest of the 4 bounty runes that:
+--   - this bot is the closest ally to (so two supports don't dogpile
+--     the same rune)
+--   - hasn't been claimed by a human teammate
+-- Returns (-1, math.huge) if none available.
+--
+-- Used during DotaTime < 0 to assign each pos 4/5 support to a real
+-- bounty rune location instead of the old fixed lane→rune mapping that
+-- sent half the supports to river powerup spots (empty at 0:00).
+--------------------------------------------------------------------
+function X.GetBestBountyRune()
+	local targetRune = -1
+	local targetRuneDistance = math.huge
+	for _, rune in pairs(nBountyRuneList) do
+		local vRuneLocation = GetRuneSpawnLocation(rune)
+
+		if X.IsTheClosestAlly(bot, vRuneLocation)
+		and not X.IsPingedByHumanPlayer(vRuneLocation, math.huge)
+		and not IsHumanClaimingRune(rune)
+		then
+			local dist = GetUnitToLocationDistance(bot, vRuneLocation)
+			if dist < targetRuneDistance then
+				targetRune = rune
+				targetRuneDistance = dist
 			end
 		end
 	end
