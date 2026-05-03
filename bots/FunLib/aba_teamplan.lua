@@ -641,55 +641,6 @@ local function computePlan(bot)
         if ok and t ~= nil then thresholds = t end
     end
 
-    -- Strategy integration: apply per-strategy adjustments to thresholds and
-    -- cadences, so a `split_push` draft plays differently from a `late_scale`
-    -- draft. Without this, the drafted strategy was only a small ModulateDesire
-    -- multiplier; bots played mid-game roughly the same regardless of comp.
-    --
-    -- Strategy is the LIVE-OVERRIDDEN one (computeLiveOverride may have
-    -- swapped to turtle/aggro based on game state).
-    local strategy = "teamfight_mid"
-    local strategyPushMinAdj = 0
-    local strategySmokeCadenceAdj = 0
-    do
-        local jmzMod_for_strat = jmz()
-        if jmzMod_for_strat and jmzMod_for_strat.DraftStrategy
-           and jmzMod_for_strat.DraftStrategy.GetEffectiveStrategyName then
-            local okS, s = pcall(function() return jmzMod_for_strat.DraftStrategy.GetEffectiveStrategyName() end)
-            if okS and type(s) == "string" then strategy = s end
-        end
-    end
-    -- Strategy-specific threshold + cadence adjustments. All clamped so no
-    -- single setting can break Phase-14 invariants (defend_base still fires
-    -- on real threat regardless; rosh still requires hard advantage).
-    if strategy == "early_aggro" then
-        thresholds.commitAllyThreshold = math.max(1, thresholds.commitAllyThreshold - 1)
-        thresholds.pushAllyThreshold = math.max(3, thresholds.pushAllyThreshold - 1)
-        strategySmokeCadenceAdj = -90   -- 180s → 90s smoke cadence
-        strategyPushMinAdj = -2 * 60    -- push 2min earlier
-    elseif strategy == "fast_siege" then
-        thresholds.pushAllyThreshold = math.max(3, thresholds.pushAllyThreshold - 1)
-        strategyPushMinAdj = -2 * 60
-    elseif strategy == "teamfight_mid" then
-        thresholds.roshAllyThreshold = math.max(2, thresholds.roshAllyThreshold - 1)
-    elseif strategy == "split_push" then
-        -- split_push: don't lower commit thresholds (we WANT the team mostly
-        -- doing other things while one core splits). Push cadence stays
-        -- normal; push_lane can fire early.
-        strategyPushMinAdj = -1 * 60
-    elseif strategy == "late_scale" then
-        thresholds.commitAllyThreshold = thresholds.commitAllyThreshold + 1
-        thresholds.pushAllyThreshold = math.min(5, thresholds.pushAllyThreshold + 1)
-        strategySmokeCadenceAdj = 60     -- 180s → 240s, less smoke
-        strategyPushMinAdj = 2 * 60      -- push 2min later
-    elseif strategy == "turtle_defensive" then
-        thresholds.commitAllyThreshold = thresholds.commitAllyThreshold + 1
-        thresholds.pushAllyThreshold = math.min(5, thresholds.pushAllyThreshold + 1)
-        thresholds.roshAllyThreshold = thresholds.roshAllyThreshold + 1
-        strategySmokeCadenceAdj = 90
-        strategyPushMinAdj = 3 * 60
-    end
-
     -- 1. DEFEND_BASE: ancient under REAL threat — Phase 14 fix.
     --
     -- Previous gate fired on 1+ enemy within 2500u. In late game both teams
@@ -735,18 +686,6 @@ local function computePlan(bot)
             local m, p = jmzMod.GetHumanPing()
             return m, p
         end)
-        -- For bot-only teams (e.g. enemy team in custom lobby), there is no
-        -- human ping. Fall through to synthetic team-objective ping so the
-        -- bot-only team still gets ping-driven push/defend intents.
-        if (not okPing or ping == nil or ping.location == nil or ping.time == 0
-            or (now - ping.time) >= 8)
-           and jmzMod.SyntheticPing and jmzMod.SyntheticPing.Get then
-            local okSyn, synPing = pcall(function() return jmzMod.SyntheticPing.Get(team) end)
-            if okSyn and synPing ~= nil then
-                ping = synPing
-                okPing = true
-            end
-        end
         if okPing and ping ~= nil and ping.location ~= nil and ping.time ~= 0
            and (now - ping.time) < 8 then
             -- River line is x+y=0. Radiant safe-side has x+y < 0; Dire's
@@ -943,8 +882,6 @@ local function computePlan(bot)
             smokeCadenceSec = pm.smoke_gank_cadence_min * 60
         end
     end
-    -- Strategy adjustment: early_aggro shortens cadence; turtle/late_scale lengthens it.
-    smokeCadenceSec = math.max(60, smokeCadenceSec + (strategySmokeCadenceAdj or 0))
     if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
        and not isInCooldown("smoke_gank") then
         local grouped = countGroupedAllies(team)
@@ -973,8 +910,6 @@ local function computePlan(bot)
             pushMinSec = pm.first_t1_fall_typical_sec * 0.6
         end
     end
-    -- Strategy adjustment: aggressive comps push earlier, scaling comps later.
-    pushMinSec = math.max(4 * 60, pushMinSec + (strategyPushMinAdj or 0))
     -- Big gold lead (>4k) overrides the min-time gate — comp that snowballs early
     -- should be allowed to press advantage.
     local nwLead = 0
@@ -1009,8 +944,6 @@ local function computePlan(bot)
             smokeCadenceSec = pm.smoke_gank_cadence_min * 60
         end
     end
-    -- Strategy adjustment: early_aggro shortens cadence; turtle/late_scale lengthens it.
-    smokeCadenceSec = math.max(60, smokeCadenceSec + (strategySmokeCadenceAdj or 0))
     if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
        and not isInCooldown("smoke_gank") then
         local grouped = countGroupedAllies(team)

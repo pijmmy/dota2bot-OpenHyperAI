@@ -285,42 +285,9 @@ local function computeLiveOverride()
         return "turtle_defensive", "early NW behind"
     end
 
-    -- New: moderate lead + multiple towers down → escalate to fast_siege
-    -- (close out the game when the door is open).
-    do
-        local team = GetTeam()
-        local enemyTeam = GetOpposingTeam()
-        local function towersDown(t)
-            local n = 0
-            for _, tid in pairs({TOWER_TOP_1, TOWER_MID_1, TOWER_BOT_1,
-                                 TOWER_TOP_2, TOWER_MID_2, TOWER_BOT_2}) do
-                local tw = GetTower(t, tid)
-                if tw == nil or tw:IsNull() or not tw:IsAlive() then n = n + 1 end
-            end
-            return n
-        end
-        local enemyT12Down = towersDown(enemyTeam)
-        local ourT12Down = towersDown(team)
-        if nwDelta >= 6000 and enemyT12Down >= 3 and now > 18 * 60 then
-            return "fast_siege", "lead+enemy 3 T1/T2 down"
-        end
-        -- New: losing badly with multiple towers lost → turtle
-        if nwDelta <= -6000 and ourT12Down >= 3 then
-            return "turtle_defensive", "behind+3 own towers down"
-        end
-    end
-
-    -- Late game and ~even: favor teamfight_mid for coordination + rosh
+    -- Late game and ~even: favor teamfight_mid for coordination
     if now > 30 * 60 and math.abs(nwDelta) < 10000 then
-        -- Switched: late-game even with teamfight intent (was late_scale,
-        -- which dampened pushes). teamfight_mid promotes rosh + commit_kill.
-        return "teamfight_mid", "late-game even, teamfight tempo"
-    end
-
-    -- New: very late game (45min+) with stalled NW (under ±5k) → late_scale
-    -- to encourage ultra-defensive play (buyback war scenarios).
-    if now > 45 * 60 and math.abs(nwDelta) < 5000 then
-        return "late_scale", "ultra-late stalled"
+        return "late_scale", "late-game even"
     end
 
     return nil

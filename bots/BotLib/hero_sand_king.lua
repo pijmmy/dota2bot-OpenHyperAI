@@ -255,7 +255,6 @@ function X.ConsiderQ()
 		if J.IsValidHero( npcEnemy )
 			and J.CanCastOnNonMagicImmune( npcEnemy )
 			and J.WillMagicKillTarget( bot, npcEnemy, nDamage + bot:GetAttackDamage(), 3.0 )
-			and not J.StunChain.ShouldDelay( npcEnemy )
 		then
 			nTargetLocation = npcEnemy:GetLocation()
 			return BOT_ACTION_DESIRE_HIGH, nTargetLocation, 'Q-击杀'..J.Chat.GetNormName( npcEnemy )
