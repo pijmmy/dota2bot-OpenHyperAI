@@ -16,6 +16,8 @@ TESTS = [
     "test_hg_defense.py",
     "test_bounty_rune.py",
     "test_roshan_pit.py",
+    "test_stun_chain.py",
+    "test_team_plan_logic.py",
 ]
 
 def main():
