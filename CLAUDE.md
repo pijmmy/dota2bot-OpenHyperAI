@@ -140,7 +140,7 @@ and what changes behaviorally. The commit-trace hook
 Exception: `chore:` / `docs:` / `trivial:` / `typo:` prefixes for
 non-code changes.
 
-**Every `git push` requires the `.claude/work-complete` marker file.** The
+**Every `git push` requires the `.work-complete` marker file.** The
 push-gate hook (`.claude/hooks/check_push_marker.sh`) blocks pushes when
 the marker is absent. The marker is auto-deleted on successful push, so
 each batch must explicitly re-create it.
@@ -148,7 +148,7 @@ each batch must explicitly re-create it.
 The workflow is:
   1. User defines a batch of work.
   2. Do all of it. No mid-batch commits-and-pushes for "checkpoints."
-  3. When done, write a one-line summary to `.claude/work-complete`.
+  3. When done, write a one-line summary to `.work-complete`.
   4. Push.
 
 If you're tempted to push partial work — stop. Keep doing the work.
