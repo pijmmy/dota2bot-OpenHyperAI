@@ -577,7 +577,15 @@ function X.GetBestBountyRune()
 	for _, rune in pairs(nBountyRuneList) do
 		local vRuneLocation = GetRuneSpawnLocation(rune)
 
-		if X.IsTheClosestAlly(bot, vRuneLocation)
+		-- Only pos 4/5 supports compete for bounty pre-game (cores have
+		-- DESIRE_NONE for rune mode pre-game and walk to lane). Using
+		-- the all-allies IsTheClosestAlly here would let a geographically
+		-- closer carry block a support from claiming a bounty even
+		-- though the carry isn't going for it. Verified failure mode:
+		-- pos 1 spawns near bounty_1 by chance → IsTheClosestAlly says
+		-- pos 1 is closest → pos 5 picks no rune → both supports end up
+		-- with -1 → nobody picks bounty.
+		if X.IsTheClosestSupport(bot, vRuneLocation)
 		and not X.IsPingedByHumanPlayer(vRuneLocation, math.huge)
 		and not IsHumanClaimingRune(rune)
 		then
@@ -590,6 +598,32 @@ function X.GetBestBountyRune()
 	end
 
 	return targetRune, targetRuneDistance
+end
+
+--------------------------------------------------------------------
+-- IsTheClosestSupport  (pos 4/5 only — for pre-game bounty distribution)
+--
+-- Like IsTheClosestAlly but only considers pos 4/5 supports as
+-- competitors. Cores aren't in rune mode pre-game so they shouldn't
+-- block supports from claiming the closest bounty.
+--------------------------------------------------------------------
+function X.IsTheClosestSupport(hUnit, vLocation)
+	local targetAlly = hUnit
+	local targetAllyDistance = GetUnitToLocationDistance(hUnit, vLocation)
+	for i = 1, 5 do
+		local member = GetTeamMember(i)
+		if J.IsValidHero(member) and member ~= hUnit then
+			local memberPos = J.GetPosition(member)
+			if memberPos and memberPos >= 4 then
+				local memberDistance = GetUnitToLocationDistance(member, vLocation)
+				if memberDistance < targetAllyDistance then
+					targetAlly = member
+					targetAllyDistance = memberDistance
+				end
+			end
+		end
+	end
+	return targetAlly == hUnit
 end
 
 --------------------------------------------------------------------
