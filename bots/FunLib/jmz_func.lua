@@ -342,6 +342,52 @@ else
     }
 end
 
+-- Synthetic team-objective pings for bot-only teams. The ping path in
+-- aba_teamplan.lua only fires when a human is on the bot's team
+-- (J.GetHumanPing iterates GetTeamPlayers for non-bots). The enemy team
+-- in a custom lobby has no humans, so they never get the ping-driven
+-- push_lane / defend_lane intent. This module emits a synthetic ping
+-- consistent with the team's drafted strategy + game state.
+local okSP, SyntheticPingModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_synthetic_pings')
+if okSP and SyntheticPingModule then
+    J.SyntheticPing = SyntheticPingModule
+else
+    print('[WARN] aba_synthetic_pings not loaded: '..tostring(SyntheticPingModule))
+    J.SyntheticPing = { Get = function(_) return nil end, Describe = function(_) return 'stub' end }
+end
+
+-- Stun-chain coordination layer. Hero CC Considers consult this to skip
+-- casting on already-locked targets and chain at the end of existing stuns.
+local okSC, StunChainModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_stun_chain')
+if okSC and StunChainModule then
+    J.StunChain = StunChainModule
+else
+    print('[WARN] aba_stun_chain not loaded: '..tostring(StunChainModule))
+    J.StunChain = {
+        ShouldDelay = function(_) return false end,
+        ShouldChainNow = function(_, _) return false end,
+        IsTargetFreshlyLocked = function(_) return false end,
+        GetCCRemaining = function(_) return 0 end,
+        Describe = function(_) return 'stub' end,
+    }
+end
+
+-- Dewarding layer. Tracks suspected enemy ward locations and tells the
+-- ward mode when to sweep them with a sentry.
+local okDW, DewardModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_deward')
+if okDW and DewardModule then
+    J.Deward = DewardModule
+else
+    print('[WARN] aba_deward not loaded: '..tostring(DewardModule))
+    J.Deward = {
+        GetSuspectedSpots = function(_) return {} end,
+        GetReachableSuspect = function(_) return nil end,
+        IsGoodTimeToSweep = function(_) return false end,
+        MarkSwept = function(_, _) end,
+        Describe = function(_) return 'stub' end,
+    }
+end
+
 
 function J.SetUserHeroInit( nAbilityBuildList, nTalentBuildList, sBuyList, sSellList )
 	-- A place to change the bot setup.

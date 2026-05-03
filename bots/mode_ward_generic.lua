@@ -82,7 +82,32 @@ function GetDesireHelper()
         end
     end
 
-    -- Sentry
+    -- Deward path: if sentry available and a suspected enemy ward is
+    -- within reach + this is a safe moment, prioritise sweeping enemy
+    -- vision. User feedback: "if they see a ward they do not remove it."
+    -- Sentry-on-suspect-spot lets bot's auto-attack pick up the revealed
+    -- enemy ward as a target.
+    if J.CanCastAbility(SentryWard)
+       and J.Deward and J.Deward.IsGoodTimeToSweep
+       and J.Deward.IsGoodTimeToSweep(bot) then
+        local suspect = J.Deward.GetReachableSuspect(bot)
+        if suspect ~= nil then
+            -- Use the suspect location as the target spot. Sentry will be
+            -- placed there to reveal & destroy enemy ward.
+            hTargetSpot = {
+                location = suspect.location,
+                plant_time_obs = 0,
+                plant_time_sentry = 0,
+                _deward_target = true,   -- marker for Think() / MarkSwept
+            }
+            if DotaTime() > fLastWardPlantTime + 1.0
+               and GetUnitToLocationDistance(bot, hTargetSpot.location) <= 4500 then
+                return BOT_MODE_DESIRE_VERYHIGH
+            end
+        end
+    end
+
+    -- Sentry (defensive)
     if J.CanCastAbility(SentryWard) then
         local hPossibleSentryWardSpots = W.GetPossibleSentryWardSpots(bot)
         hTargetSpot = W.GetClosestSentryWardSpot(bot, hPossibleSentryWardSpots)
@@ -142,6 +167,10 @@ function Think()
 				end
 
 				hTargetSpot.plant_time_sentry = DotaTime()
+				-- Mark deward target as swept so we don't re-walk to it for 5min.
+				if hTargetSpot._deward_target and J.Deward and J.Deward.MarkSwept then
+					J.Deward.MarkSwept(bot:GetTeam(), hTargetSpot.location)
+				end
 				return
 			else
 				bot:Action_MoveToLocation(hTargetSpot.location)

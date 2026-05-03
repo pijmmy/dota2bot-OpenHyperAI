@@ -140,12 +140,43 @@ function GetFurthestEnemyAttackRange(enemyList)
 	return attackRange
 end
 
+-- Returns true if a friendly core (pos 1/2/3) ally has the creep in their
+-- attack range. Used to suppress support last-hit attempts that would
+-- compete with the carry/mid/offlaner for gold.
+local function isCoreAllyInRangeOfCreep(creep)
+	if creep == nil then return false end
+	local creepLoc = creep:GetLocation()
+	for i = 1, 5 do
+		local ally = GetTeamMember(i)
+		if ally ~= nil and ally ~= bot and ally:IsAlive() and not ally:IsIllusion() then
+			local okPos, allyPos = pcall(function() return J.GetPosition(ally) end)
+			if okPos and allyPos ~= nil and allyPos <= 3 then
+				local allyAtkRange = ally:GetAttackRange()
+				-- Use slightly bigger window (+50) because the ally might step
+				-- to take the lasthit; we want supports to give them space.
+				if GetUnitToLocationDistance(ally, creepLoc) <= allyAtkRange + 50 then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
 function GetBestLastHitCreep(hCreepList)
 	local dmgDelta = attackDamage * 0.7
 
+	-- Farm-contention fix: pos 4/5 supports should not steal last-hits from
+	-- pos 1/2/3 cores. If a core ally is in attack range of the candidate
+	-- creep, skip it. Cores will lasthit themselves; supports should
+	-- harass / pull / stack / ward instead.
+	local botPosOk, botPos = pcall(function() return J.GetPosition(bot) end)
+	local isSupport = botPosOk and botPos ~= nil and botPos >= 4
+
 	local moveToCreep = nil
 	for _, creep in pairs(hCreepList) do
-		if J.IsValid(creep) and J.CanBeAttacked(creep) then
+		if J.IsValid(creep) and J.CanBeAttacked(creep)
+		   and not (isSupport and isCoreAllyInRangeOfCreep(creep)) then
 			local nDelay = J.GetAttackProDelayTime(bot, creep)
 			if J.WillKillTarget(creep, attackDamage, DAMAGE_TYPE_PHYSICAL, nDelay) then
 				return creep, false
