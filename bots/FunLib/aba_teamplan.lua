@@ -728,6 +728,18 @@ local function computePlan(bot)
             local m, p = jmzMod.GetHumanPing()
             return m, p
         end)
+        -- For bot-only teams (e.g. enemy team in custom lobby), there is no
+        -- human ping. Fall through to synthetic team-objective ping so the
+        -- bot-only team still gets ping-driven push/defend intents.
+        if (not okPing or ping == nil or ping.location == nil or ping.time == 0
+            or (now - ping.time) >= 8)
+           and jmzMod.SyntheticPing and jmzMod.SyntheticPing.Get then
+            local okSyn, synPing = pcall(function() return jmzMod.SyntheticPing.Get(team) end)
+            if okSyn and synPing ~= nil then
+                ping = synPing
+                okPing = true
+            end
+        end
         if okPing and ping ~= nil and ping.location ~= nil and ping.time ~= 0
            and (now - ping.time) < 8 then
             -- River line is x+y=0. Radiant safe-side has x+y < 0; Dire's
