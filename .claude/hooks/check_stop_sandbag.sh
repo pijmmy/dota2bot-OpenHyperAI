@@ -101,6 +101,35 @@ check "let me commit"
 check "committing (this|now|first)"
 check "pushed.{0,30}(state of|status|summary)"
 
+# Status-report scaffolding — reply structures that read as status reports
+# even when the user just wanted the result. These patterns leaked through
+# the original ban list; documented in item 5 of the trust audit.
+check "^(state|final state|cumulative|cumulative coverage|coverage so far)"
+check "(state of|status of|summary of) (the|this) (pr|branch|audit|batch|fix|change|repo)"
+check "what (this commit )?(does|doesn'?t|did|did not)"
+check "what (this )?(commit|batch|change|fix) does"
+check "what (was|gets) (verified|covered|done|fixed)"
+check "^cumulative (coverage|state|status|fixes|audit)"
+check "^heroes (deliberately|specifically) (not|skipped|excluded)"
+check "^heroes (with|without) (the helper|coverage|the modifier)"
+check "^conclusion[\\.\\:]"
+check "^summary[\\.\\:]"
+check "^findings[\\.\\:]"
+check "^method[\\.\\:]"
+check "^per-hero (decisions|coverage|audit|breakdown)"
+
+# "What I've done" lists — narrating the past instead of stating the result
+check "what i'?ve (done|fixed|patched|added|covered)"
+check "what i (did|fixed|patched|added|covered)"
+check "(this|each) (commit|batch|fix) (does|covers|includes)"
+check "^the (changes|fixes|edits|patches) (in|to|for) this"
+
+# Self-flagellation / process-narration in replies (still chat-loop)
+check "^now (let me|i'?ll|i'?m going to)"
+check "^next (i'?ll|step|up|i need)"
+check "^(going|grinding) (to|through)"
+check "(i need to|i'?ll need to) keep (going|working)"
+
 if [ -n "$HITS" ]; then
     cat >&2 <<MSG
 [stop-blocker] Your reply contains banned sandbag/exit-ramp phrases:

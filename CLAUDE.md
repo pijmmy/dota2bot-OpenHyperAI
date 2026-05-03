@@ -98,6 +98,8 @@ disclosure but they're sandbag phrases that signal chat-loop drift. The
 Stop hook (`.claude/hooks/check_stop_sandbag.sh`) will reject the reply
 and force a rewrite if any appear:
 
+**Original ban list (item-5 audit):**
+
 - "still not done" / "haven't audited" / "haven't verified" / "haven't fixed"
 - "needs lobby test" / "needs lobby verification" / "needs lobby observation"
 - "want me to keep going" / "should I continue/proceed/keep going"
@@ -107,6 +109,25 @@ and force a rewrite if any appear:
   with this on a behavior-bug report)
 - Opening with "fair", "right", "got it", "alright", "ok", "gotcha"
 - "let me commit" / "committing now" / "pushed [state of...]" mid-task
+
+**Expanded ban list (item-5 of trust audit added these):**
+
+- "Final state of..." / "Cumulative coverage" / "Coverage so far"
+  — these are status-report scaffolding even when the user wanted just
+  the result.
+- "What this commit does" / "What this batch does" / "What this fix does"
+  — narrating the past instead of stating the result.
+- "What I've done" / "What I did" / "What was verified" lists
+- Section headers in stop-replies: `^Conclusion`, `^Summary`, `^Findings`,
+  `^Method` — replies aren't reports, they're answers.
+- "Heroes deliberately not updated" / "Heroes specifically excluded"
+  — past-tense lists of the boundaries of what I did.
+- "Now let me..." / "Next I'll..." / "Going through..." — process
+  narration that signals incomplete work pretending to be an update.
+- "Per-hero coverage" / "Per-hero breakdown" tables in replies.
+
+The pattern: any reply that reads like a status report SHOULD be a
+result instead. Either: "Done. <result>" or just keep working silently.
 
 The override is to actually finish the work. The hook is not gameable.
 
