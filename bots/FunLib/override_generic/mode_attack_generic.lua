@@ -14,6 +14,20 @@ local botAttackRange, botHP, botMP, botHealth, botAttackDamage, botAttackSpeed, 
 local fLastAttackDesire = 0
 local bClearMode = false
 
+-- Sticky-target hysteresis. Without this, the per-tick target picker
+-- (line ~280, scores enemies by HP * dmg * ally-diff * mul) can flip
+-- between two close-scoring enemies each tick. Bot effectively oscillates
+-- because it issues Action_AttackUnit on a different unit every frame.
+-- User: "they toggle or get stuck sometimes going backwards and forwards."
+--
+-- Lock duration 1.2s (one full attack swing on most ranged heroes).
+-- Switch only when:
+--   (a) lock expired AND new pick is valid, OR
+--   (b) cached target is dead/invisible/illusion-revealed, OR
+--   (c) new pick scores >= 1.5x current pick (clear upgrade)
+local _lastAttackTarget = {}
+local ATTACK_TARGET_LOCK_SEC = 1.2
+
 local function IsValid(hUnit)
 	return hUnit ~= nil and not hUnit:IsNull() and hUnit:IsAlive()
 end
@@ -145,8 +159,27 @@ function Generic.GetDesire()
 			if b1 or b2 or b3 then
 				local dist = GetUnitToUnitDistance(bot, enemyHero)
 				if dist <= 2000 or ((dist / bot:GetCurrentMovementSpeed()) <= 10.0) then
-					if J.IsInLaningPhase() and bot:GetActiveMode() == BOT_MODE_ATTACK then
-						if bot:WasRecentlyDamagedByTower(2.0) or (J.IsValidBuilding(tEnemyTowers[1]) and tEnemyTowers[1]:GetAttackTarget() == bot) then
+					-- Tower-dive guard. Old code gated on IsInLaningPhase
+					-- which meant attack-mode could dive towers freely
+					-- post-laning. User: "the bots just dive the towers."
+					-- Now fires whenever bot is taking tower hits OR
+					-- a tower is currently auto-targeting bot OR bot is
+					-- inside tower attack range (700u). Skipped only when
+					-- bot has an immortal-frame buff or we're in a real
+					-- teamfight (b3) with team-fight-location commitment.
+					if not b3
+					   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+					   and not bot:HasModifier('modifier_item_satanic_unholy')
+					   and not bot:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
+					   and not bot:IsAttackImmune()
+					then
+						local divingNow = false
+						if bot:WasRecentlyDamagedByTower(2.0) then divingNow = true end
+						if J.IsValidBuilding(tEnemyTowers[1]) then
+							if tEnemyTowers[1]:GetAttackTarget() == bot then divingNow = true end
+							if GetUnitToUnitDistance(bot, tEnemyTowers[1]) < 700 then divingNow = true end
+						end
+						if divingNow then
 							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
 						end
 					end
@@ -264,17 +297,38 @@ function Generic.Think()
 			end
 		end
 
-		-- Tower damage: retreat if significant
-		if J.IsValidBuilding(nEnemyTowers[1]) and nEnemyTowers[1]:GetAttackTarget() == bot and not bTeamFight then
-			local unitDamage = 0
-			for _, unit in pairs(GetUnitList(UNIT_LIST_ENEMIES)) do
-				if J.IsValid(unit) and unit:GetAttackTarget() == bot then
-					unitDamage = unitDamage + bot:GetActualIncomingDamage(unit:GetAttackDamage() * unit:GetAttackSpeed() * 3.0, DAMAGE_TYPE_PHYSICAL)
-				end
+		-- Tower damage: retreat if significant. Old gate required tower to
+		-- be currently targeting bot which missed the "in tower range,
+		-- about to be acquired" case. Now also retreats when bot is
+		-- within tower attack range (700u) and isn't immortal-framed.
+		if J.IsValidBuilding(nEnemyTowers[1]) and not bTeamFight
+		   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+		   and not bot:HasModifier('modifier_item_satanic_unholy')
+		   and not bot:IsAttackImmune()
+		then
+			local towerDanger = false
+			if nEnemyTowers[1]:GetAttackTarget() == bot then towerDanger = true end
+			if not towerDanger and GetUnitToUnitDistance(bot, nEnemyTowers[1]) < 700 then
+				-- Inside tower range but not yet targeted — bail before
+				-- the tower acquires us (especially on creep-aggro flicker).
+				towerDanger = true
 			end
-			if unitDamage / (botHealth + bot:GetHealthRegen() * 3.0) >= 0.2 then
-				bot:Action_MoveToLocation(J.VectorAway(botLocation, nEnemyTowers[1]:GetLocation(), 800))
-				return
+			if towerDanger then
+				local unitDamage = 0
+				for _, unit in pairs(GetUnitList(UNIT_LIST_ENEMIES)) do
+					if J.IsValid(unit) and unit:GetAttackTarget() == bot then
+						unitDamage = unitDamage + bot:GetActualIncomingDamage(unit:GetAttackDamage() * unit:GetAttackSpeed() * 3.0, DAMAGE_TYPE_PHYSICAL)
+					end
+				end
+				-- Threshold dropped to 0.15 (was 0.2) — bots were
+				-- absorbing 2 tower hits before reacting. Also fire
+				-- if just tower-aggroed, regardless of damage estimate.
+				if unitDamage / (botHealth + bot:GetHealthRegen() * 3.0) >= 0.15
+				   or nEnemyTowers[1]:GetAttackTarget() == bot
+				then
+					bot:Action_MoveToLocation(J.VectorAway(botLocation, nEnemyTowers[1]:GetLocation(), 800))
+					return
+				end
 			end
 		end
 	end
@@ -330,6 +384,34 @@ function Generic.Think()
 				targetScore = enemyScore
 				__target = enemy
 			end
+		end
+	end
+
+	-- Sticky-target hysteresis. If we've recently locked a target and it's
+	-- still valid, keep it unless the new pick is a clear upgrade (>=1.5x
+	-- score). Eliminates the per-tick flicker between two close-scoring
+	-- enemies that caused the "going backwards and forwards" symptom.
+	do
+		local pid = bot:GetPlayerID()
+		local cached = _lastAttackTarget[pid]
+		local now = DotaTime()
+		local cachedValid = cached ~= nil
+			and cached.unit ~= nil and not cached.unit:IsNull() and cached.unit:IsAlive()
+			and cached.unit:CanBeSeen() and not cached.unit:IsIllusion()
+			and J.CanBeAttacked(cached.unit)
+		if cachedValid and (now - cached.lockedAt) < ATTACK_TARGET_LOCK_SEC then
+			-- Within lock window: only switch if new pick is much better.
+			if __target == nil or targetScore < cached.score * 1.5 then
+				__target = cached.unit
+				targetScore = cached.score
+			end
+		end
+		if __target ~= nil then
+			_lastAttackTarget[pid] = {
+				unit = __target,
+				score = targetScore,
+				lockedAt = (cachedValid and cached.unit == __target) and cached.lockedAt or now,
+			}
 		end
 	end
 
