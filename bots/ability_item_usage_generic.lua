@@ -2570,12 +2570,26 @@ X.ConsiderItemDesire["item_force_staff"] = function( hItem )
 			if botTarget:IsFacingLocation( allyCenterLocation, 28 )
 				and GetUnitToLocationDistance( bot, allyCenterLocation ) >= 500
 			then
-				hEffectTarget = botTarget
-				sCastMotive = '推敌人靠近自己'..J.Chat.GetNormName( hEffectTarget )
-				return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
-			end			
+				-- Anti-dive: force-staff "push enemy toward self" only
+				-- works if "self" position is safe. If bot's location
+				-- is inside enemy tower range, pulling the enemy toward
+				-- bot also pulls bot's commit-zone into tower aggro
+				-- (allies converge on bot, dive together). Skip when
+				-- bot's location is in tower range without an immortal
+				-- frame. Audit: ability_item_usage_generic.lua
+				-- item_force_staff push-toward-self (RISK 1).
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, bot:GetLocation(), 0) then
+					-- Skip: pulling enemy toward us would commit us to
+					-- a fight in tower range.
+				else
+					hEffectTarget = botTarget
+					sCastMotive = '推敌人靠近自己'..J.Chat.GetNormName( hEffectTarget )
+					return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
+				end
+			end
 		end
-	end	
+	end
 
 	return BOT_ACTION_DESIRE_NONE
 

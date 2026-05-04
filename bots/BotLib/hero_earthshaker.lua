@@ -689,7 +689,22 @@ function X.ConsiderBlinkSlam()
 
             if nInRangeEnemy ~= nil and #nInRangeEnemy >= 2
             then
-                return BOT_ACTION_DESIRE_HIGH, J.GetCenterOfUnits(nInRangeEnemy)
+                local slamCenter = J.GetCenterOfUnits(nInRangeEnemy)
+                -- Anti-dive: blink-slam puts ES inside enemy AOE,
+                -- which is often inside enemy tower range too. ES is
+                -- not a designed dive-tank (Stout Shield only); blinking
+                -- onto a 2-man cluster under tower without an immortal
+                -- frame is a one-way commit. Suppress unless we have
+                -- an immortal frame or a 3+ enemy cluster (the bigger
+                -- the AOE payoff, the more worth the dive).
+                -- Audit: hero_earthshaker.lua ConsiderBlinkSlam (RISK 2).
+                local clusterPaysOff = (#nInRangeEnemy >= 3)
+                if not clusterPaysOff
+                   and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, slamCenter, 0) then
+                    return BOT_ACTION_DESIRE_NONE, 0
+                end
+                return BOT_ACTION_DESIRE_HIGH, slamCenter
             end
         end
     end

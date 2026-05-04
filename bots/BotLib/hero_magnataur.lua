@@ -763,6 +763,20 @@ function X.ConsiderBlinkRP()
                 and not J.IsLocationInChrono(nLocationAoE.targetloc)
                 and not J.IsLocationInBlackHole(nLocationAoE.targetloc)
                 then
+                    -- Anti-dive: BlinkRP commits Magnus to the AOE
+                    -- center, often inside enemy tower range when the
+                    -- teamfight clusters near a tower. Magnus has no
+                    -- immortal frame by default (sometimes Satanic late);
+                    -- post-RP he's vulnerable until Skewer follow-up.
+                    -- Allow when 3+ enemies in cluster (dive payoff
+                    -- justifies the risk) OR not actually diving.
+                    -- Audit: hero_magnataur.lua ConsiderBlinkRP (RISK 2).
+                    local clusterPaysOff = (#realEnemyCount >= 3)
+                    if not clusterPaysOff
+                       and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                       and J.Safezone.WouldDiveIfMovedTo(bot, nLocationAoE.targetloc, 0) then
+                        return BOT_ACTION_DESIRE_NONE
+                    end
                     BlinkLocation = nLocationAoE.targetloc
                     return BOT_ACTION_DESIRE_HIGH
                 end

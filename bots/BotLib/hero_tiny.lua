@@ -721,6 +721,16 @@ function X.ConsiderBlinkToss()
 				if J.IsInRange(bot, botTarget, nCastRange)
 				and GetUnitToUnitDistance(bot, botTarget) > nRadius
 				then
+					-- Anti-dive: blink-toss puts Tiny adjacent to target
+					-- (toss requires <=275u). If target is under enemy
+					-- tower, Tiny lands in tower range with no immortal
+					-- frame by default. Suppress unless we have an
+					-- immortal frame OR HP buffer to absorb. Audit:
+					-- hero_tiny.lua ConsiderBlinkToss (RISK 2).
+					if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+					   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0) then
+						return BOT_ACTION_DESIRE_NONE, 0
+					end
 					BlinkLocation = botTarget:GetLocation()
 					return BOT_ACTION_DESIRE_HIGH, nInRangeAlly[#nInRangeAlly]
 				end
