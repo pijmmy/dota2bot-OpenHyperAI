@@ -122,6 +122,16 @@ function GetDesire()
     -- local cachedVar = J.Utils.GetCachedVars(cacheKey, 0.35 * (1 + Customize.ThinkLess))
     -- if DotaTime() > 30 and cachedVar ~= nil then return cachedVar end
     local res = GetDesireHelper()
+    -- EMA smoothing (alpha = 0.30): without this, retreat desire swings
+    -- between BOT_MODE_DESIRE_NONE and HIGH/ABSOLUTE based on per-tick
+    -- enemy/ally count flicker. Combined with mode_attack's existing
+    -- alpha=0.30 smoothing, this damps the attack<->retreat oscillation
+    -- the audit identified at mode_retreat_generic.lua:124.
+    -- See bots/FunLib/aba_hysteresis.lua + docs/SOURCES.md.
+    local pid = bot:GetPlayerID()
+    if J.Hysteresis and J.Hysteresis.StickyDesire then
+        res = J.Hysteresis.StickyDesire(pid, "retreat", res, 0.30)
+    end
     -- J.Utils.SetCachedVars(cacheKey, res)
     return J.Personality.ModulateDesire(bot, res, 'retreat')
 end

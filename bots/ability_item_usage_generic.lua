@@ -1620,6 +1620,29 @@ X.ConsiderItemDesire["item_blink"] = function( hItem )
 				local nDistance = Min(nCastRange, GetUnitToUnitDistance(bot, botTarget))
 				local vLocation = J.GetUnitTowardDistanceLocation(bot, botTarget, nDistance) + RandomVector(150)
 				if IsLocationPassable(vLocation) then
+					-- Anti-dive on blink destination. Audit:
+					-- ability_item_usage_generic.lua:1572-1626 — combat
+					-- blink path had no enemy-tower check. Every blink-init
+					-- hero (Axe, ES, Magnus, Tiny, Treant) used this. Now
+					-- blink suppresses when destination puts bot in tower
+					-- range without immortal frame.
+					-- See bots/FunLib/aba_safezone.lua + docs/SOURCES.md.
+					if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+					   and J.Safezone.WouldDiveIfMovedTo(bot, vLocation, 0) then
+						-- Dive blocked. Try a step-back blink: same
+						-- direction but stop short of the target so we
+						-- engage from outside tower range.
+						local safeDist = nDistance - 250
+						if safeDist >= 200 then
+							local safeLoc = J.GetUnitTowardDistanceLocation(bot, botTarget, safeDist) + RandomVector(80)
+							if IsLocationPassable(safeLoc)
+							   and not J.Safezone.WouldDiveIfMovedTo(bot, safeLoc, 0) then
+								return BOT_ACTION_DESIRE_HIGH, safeLoc, 'ground', nil
+							end
+						end
+						-- Otherwise abandon the blink rather than dive.
+						return BOT_ACTION_DESIRE_NONE
+					end
 					return BOT_ACTION_DESIRE_HIGH, vLocation, 'ground', nil
 				end
 			end

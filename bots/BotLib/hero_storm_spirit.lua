@@ -452,7 +452,21 @@ function X.ConsiderBallLightning()
 			local distance = GetUnitToUnitDistance(bot, botTarget)
 			if distance > botAttackRange or not bot:HasModifier('modifier_storm_spirit_overload') then
 				local nDelay = (GetUnitToUnitDistance(bot, botTarget) / nSpeed) + nCastPoint
-				return BOT_ACTION_DESIRE_HIGH, J.GetCorrectLoc(botTarget, nDelay)
+				local zapLoc = J.GetCorrectLoc(botTarget, nDelay)
+				-- Anti-dive: BL destination puts Storm in attack range of
+				-- target. If target is under enemy tower and Storm has no
+				-- immortal frame, the zap commits Storm to a tower dive
+				-- with no creep tank. Audit: hero_storm_spirit.lua
+				-- ConsiderBallLightning (RISK 3 — Storm reliably zaps under
+				-- towers in user games).
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, zapLoc, 0) then
+					-- BL suppressed. Storm can still attack the target
+					-- from current position if in range, or wait for a
+					-- safer engagement.
+				else
+					return BOT_ACTION_DESIRE_HIGH, zapLoc
+				end
 			end
 		end
 	end

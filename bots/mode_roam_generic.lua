@@ -170,8 +170,17 @@ function Think()
 	   and plan.validUntil ~= nil and DotaTime() < plan.validUntil then
 		local focusedTarget = J.Focus and J.Focus.GetFocusIfInRange and J.Focus.GetFocusIfInRange(bot, 1400) or nil
 		if focusedTarget ~= nil and J.IsValid(focusedTarget) then
-			bot:Action_AttackUnit(focusedTarget, true)
-			return
+			-- Anti-dive: same as team_roam focus override. Don't solo
+			-- dive a focused target into tower range without an immortal
+			-- frame. Audit: mode_roam_generic.lua:173 (RISK 3).
+			local focusLoc = focusedTarget:GetLocation()
+			if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+			   and J.Safezone.WouldDiveIfMovedTo(bot, focusLoc, 0) then
+				-- Suppressed; fall through to non-focus decision logic.
+			else
+				bot:Action_AttackUnit(focusedTarget, true)
+				return
+			end
 		end
 	end
 

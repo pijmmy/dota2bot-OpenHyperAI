@@ -225,7 +225,20 @@ function X.ConsiderChargeOfDarkness()
 
         if target ~= nil
         then
-            return BOT_ACTION_DESIRE_HIGH, target
+            -- Anti-dive: charge can land Spirit Breaker right under
+            -- enemy tower with no creep tank. The post-charge
+            -- ChargeRetreat in Think runs AFTER landing, so SB takes
+            -- 2-3 tower hits before it disengages. Suppress the charge
+            -- if landing zone is in enemy tower range without an
+            -- immortal frame. Audit:
+            -- hero_spirit_breaker.lua ConsiderChargeOfDarkness (RISK 3 —
+            -- full-map mobility makes this dive cheap).
+            if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+               and J.Safezone.WouldDiveIfMovedTo(bot, target:GetLocation(), 0) then
+                -- Charge suppressed; SB stays on its current path.
+            else
+                return BOT_ACTION_DESIRE_HIGH, target
+            end
         end
 	end
 

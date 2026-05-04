@@ -1357,14 +1357,45 @@ function ____exports.DefendThink(bot, lane)
         end
         return
     end
+    -- Sticky hero target. Audit found that defend mode picks
+    -- enemiesAtHub[1] / nEnemyHeroes[1] each tick — the engine returns
+    -- these arrays sorted by distance, but distances flicker tick-to-tick
+    -- on movement. Two heroes at similar distances swap [1] each tick,
+    -- bot oscillates between them, never lands a hit. Use the unified
+    -- hysteresis utility (1.5s lock, switch on 1.5x score upgrade).
+    -- Score = 1/distance (closer = higher) — simple and aligned with the
+    -- engine's existing distance-sort.
+    local pid = bot:GetPlayerID()
     local enemiesAtHub = jmz.GetEnemiesNearLoc(hub, SEARCH_RANGE_DEFAULT)
+    local hubFresh, hubScore = nil, 0
     if jmz.IsValidHero(enemiesAtHub[1]) and jmz.IsInRange(bot, enemiesAtHub[1], nSearchRange) then
-        bot:Action_AttackUnit(enemiesAtHub[1], true)
+        hubFresh = enemiesAtHub[1]
+        hubScore = 1.0 / math.max(1, GetUnitToUnitDistance(bot, hubFresh))
+    end
+    if jmz.Hysteresis and jmz.Hysteresis.StickyTarget and hubFresh ~= nil then
+        local hubPick = jmz.Hysteresis.StickyTarget(pid, hubFresh, hubScore, 1.5, 1.5, "defend_hub")
+        if hubPick ~= nil and jmz.IsInRange(bot, hubPick, nSearchRange) then
+            bot:Action_AttackUnit(hubPick, true)
+            return
+        end
+    elseif hubFresh ~= nil then
+        bot:Action_AttackUnit(hubFresh, true)
         return
     end
     local nEnemyHeroes = bot:GetNearbyHeroes(SEARCH_RANGE_DEFAULT, true, BotMode.None)
+    local nbyFresh, nbyScore = nil, 0
     if jmz.IsValidHero(nEnemyHeroes[1]) and jmz.IsInRange(bot, nEnemyHeroes[1], nSearchRange) then
-        bot:Action_AttackUnit(nEnemyHeroes[1], true)
+        nbyFresh = nEnemyHeroes[1]
+        nbyScore = 1.0 / math.max(1, GetUnitToUnitDistance(bot, nbyFresh))
+    end
+    if jmz.Hysteresis and jmz.Hysteresis.StickyTarget and nbyFresh ~= nil then
+        local nbyPick = jmz.Hysteresis.StickyTarget(pid, nbyFresh, nbyScore, 1.5, 1.5, "defend_nby")
+        if nbyPick ~= nil and jmz.IsInRange(bot, nbyPick, nSearchRange) then
+            bot:Action_AttackUnit(nbyPick, true)
+            return
+        end
+    elseif nbyFresh ~= nil then
+        bot:Action_AttackUnit(nbyFresh, true)
         return
     end
     local creeps = bot:GetNearbyCreeps(900, true)

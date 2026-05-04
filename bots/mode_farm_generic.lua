@@ -54,6 +54,28 @@ local runMode = false;
 
 if bot.farmLocation == nil then bot.farmLocation = bot:GetLocation() end
 
+-- Sticky neutral picker: wraps J.Site.FindFarmNeutralTarget with the
+-- unified hysteresis utility (1.5s lock, 1.5x upgrade threshold).
+-- Audit identified 4 callsites where the picker output flickers when
+-- creeps take damage and the min/max-HP ranking flips. This helper is
+-- the canonical path; all 4 callsites in Think route through it.
+-- See bots/FunLib/aba_hysteresis.lua + docs/SOURCES.md.
+local function pickStickyFarmNeutral(creeps)
+	local fresh = J.Site.FindFarmNeutralTarget(creeps)
+	if not J.IsValid(fresh) then return nil end
+	if J.Hysteresis and J.Hysteresis.StickyTarget then
+		-- Score: prefer low-HP creeps (closer to kill = better farm).
+		local okHP, hp = pcall(function()
+			return fresh:GetHealth() / math.max(1, fresh:GetMaxHealth())
+		end)
+		local score = okHP and (1.0 - hp) or 0.5
+		local pick, _ = J.Hysteresis.StickyTarget(
+			bot:GetPlayerID(), fresh, score, 1.5, 1.5, "farm_neutral")
+		if J.IsValid(pick) then return pick end
+	end
+	return fresh
+end
+
 function GetDesire()
 	-- local cacheKey = 'GetFarmDesire'..tostring(bot:GetPlayerID())
 	-- local cachedVar = J.Utils.GetCachedVars(cacheKey, 0.4)
@@ -676,7 +698,7 @@ function Think()
 
 			-- Use ability-specific range for neutral farming too
 			local nFarmRange = math.max(nEffectiveRange, bot:GetAttackRange())
-			local farmTarget = J.Site.FindFarmNeutralTarget(nNeutrals)
+			local farmTarget = pickStickyFarmNeutral(nNeutrals)
 			if J.IsValid(farmTarget)
 			then
 				bot:SetTarget(farmTarget);
@@ -712,7 +734,7 @@ function Think()
 
 				farmState = FARM_STATE_FARM;
 				
-				local farmTarget = J.Site.FindFarmNeutralTarget(neutralCreeps)
+				local farmTarget = pickStickyFarmNeutral(neutralCreeps)
 				if J.IsValid(farmTarget)
 				then
 					bot:SetTarget(farmTarget);
@@ -729,7 +751,7 @@ function Think()
 					preferedCamp  = J.Site.GetClosestNeutralSpwan(bot, availableCamp);
 
 
-					local farmTarget = J.Site.FindFarmNeutralTarget(neutralCreeps)
+					local farmTarget = pickStickyFarmNeutral(neutralCreeps)
 					if J.IsValid(farmTarget)
 					then
 						bot:SetTarget(farmTarget);
@@ -738,7 +760,7 @@ function Think()
 					end
 			else
 			
-				local farmTarget = J.Site.FindFarmNeutralTarget(neutralCreeps)
+				local farmTarget = pickStickyFarmNeutral(neutralCreeps)
 				if J.IsValid(farmTarget)
 				then
 					bot:SetTarget(farmTarget);

@@ -32,6 +32,8 @@ TESTS = [
     "test_teamplan_helpers.py",
     "test_anti_dive.py",
     "test_attack_target_hysteresis.py",
+    "test_hysteresis.py",
+    "test_safezone.py",
 ]
 
 def main():

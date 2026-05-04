@@ -413,6 +413,38 @@ else
     }
 end
 
+-- Hysteresis utility (sticky targets / gates / desires).
+-- See bots/FunLib/aba_hysteresis.lua for design.
+local okHy, HysteresisModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_hysteresis')
+if okHy and HysteresisModule then
+    J.Hysteresis = HysteresisModule
+else
+    print('[WARN] aba_hysteresis not loaded: '..tostring(HysteresisModule))
+    J.Hysteresis = {
+        StickyTarget = function(_, fresh, score, _, _, _) return fresh, score or 0 end,
+        ClearStickyTarget = function(_, _) end,
+        StickyGate = function(_, _, fresh, _) return fresh end,
+        StickyDesire = function(_, _, fresh, _) return fresh end,
+        ResetStickyDesire = function(_, _) end,
+        Describe = function(_, _) return 'stub' end,
+    }
+end
+
+-- Safezone utility (anti-dive predicates).
+local okSz, SafezoneModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_safezone')
+if okSz and SafezoneModule then
+    J.Safezone = SafezoneModule
+else
+    print('[WARN] aba_safezone not loaded: '..tostring(SafezoneModule))
+    J.Safezone = {
+        IsLocSafeFromEnemyTowers = function(_, _) return true end,
+        WouldDiveIfMovedTo = function(_, _, _) return false end,
+        EstimateTowerDPS = function(_, _, _) return 0 end,
+        TOWER_ATTACK_RANGE = 700,
+        DEFAULT_DANGER_RADIUS = 750,
+    }
+end
+
 
 function J.SetUserHeroInit( nAbilityBuildList, nTalentBuildList, sBuyList, sSellList )
 	-- A place to change the bot setup.
