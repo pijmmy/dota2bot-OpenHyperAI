@@ -15,6 +15,7 @@ local fLastAttackDesire = 0
 local bClearMode = false
 
 local badEventCaptured = false
+local lastMidPathKey = nil
 
 local function IsMidEarlyWindow()
 	local t = DotaTime()
@@ -23,7 +24,11 @@ end
 
 local function LogMidPath(tag, detail)
 	if IsMidEarlyWindow() then
-		print('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail)
+		local key = tag .. '|' .. detail
+		if key ~= lastMidPathKey then
+			lastMidPathKey = key
+			print('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail)
+		end
 	end
 end
 
@@ -379,7 +384,7 @@ function Generic.Think()
 			if dist < botAttackRange then
 				if not J.CanBeAttacked(__target) then
 					LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
-				bot:Action_MoveToLocation(__target:GetLocation())
+					bot:Action_MoveToLocation(__target:GetLocation())
 				else
 					LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
 					bot:Action_AttackUnit(__target, true)
@@ -387,24 +392,28 @@ function Generic.Think()
 			else
 				bot:Action_MoveToLocation(__target:GetLocation())
 			end
-			return
-		else
-			-- Ranged: kite when target can't be attacked
-			if dist < botAttackRange then
-				if not J.CanBeAttacked(__target) then
-					if dist < botAttackRange - 100 then
-						bot:Action_MoveToLocation(J.VectorAway(botLocation, __target:GetLocation(), botAttackRange - dist - 100))
-					elseif dist > botAttackRange - 100 then
-						bot:Action_MoveToLocation(J.VectorTowards(botLocation, __target:GetLocation(), dist - botAttackRange - 100))
+				return
+			else
+				-- Ranged: kite when target can't be attacked
+				if dist < botAttackRange then
+					if not J.CanBeAttacked(__target) then
+						if dist < botAttackRange - 100 then
+							LogMidPath('Command', 'action=KiteAway target=' .. __target:GetUnitName())
+							bot:Action_MoveToLocation(J.VectorAway(botLocation, __target:GetLocation(), botAttackRange - dist - 100))
+						elseif dist > botAttackRange - 100 then
+							LogMidPath('Command', 'action=KiteTowards target=' .. __target:GetUnitName())
+							bot:Action_MoveToLocation(J.VectorTowards(botLocation, __target:GetLocation(), dist - botAttackRange - 100))
+						end
+					else
+						LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
+						bot:Action_AttackUnit(__target, true)
 					end
 				else
-					bot:Action_AttackUnit(__target, true)
+					LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
+					bot:Action_MoveToLocation(__target:GetLocation())
 				end
-			else
-				bot:Action_MoveToLocation(__target:GetLocation())
+				return
 			end
-			return
-		end
 	end
 
 	-- Help ally movement
