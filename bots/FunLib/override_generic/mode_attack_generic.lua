@@ -379,19 +379,19 @@ function Generic.Think()
 		botTarget.id = __target:GetPlayerID()
 		bot:SetTarget(__target)
 
-		-- Melee vs ranged positioning
-		if botAttackRange < 330 and botName ~= 'npc_dota_hero_templar_assassin' then
-			if dist < botAttackRange then
-				if not J.CanBeAttacked(__target) then
-					LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
-					bot:Action_MoveToLocation(__target:GetLocation())
+			-- Melee vs ranged positioning
+			if botAttackRange < 330 and botName ~= 'npc_dota_hero_templar_assassin' then
+				if dist < botAttackRange then
+					if not J.CanBeAttacked(__target) then
+						LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
+						bot:Action_MoveToLocation(__target:GetLocation())
+					else
+						LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
+						bot:Action_AttackUnit(__target, true)
+					end
 				else
-					LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
-					bot:Action_AttackUnit(__target, true)
+					bot:Action_MoveToLocation(__target:GetLocation())
 				end
-			else
-				bot:Action_MoveToLocation(__target:GetLocation())
-			end
 				return
 			else
 				-- Ranged: kite when target can't be attacked
