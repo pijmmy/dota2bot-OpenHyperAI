@@ -14,6 +14,24 @@ local botAttackRange, botHP, botMP, botHealth, botAttackDamage, botAttackSpeed, 
 local fLastAttackDesire = 0
 local bClearMode = false
 
+local badEventCaptured = false
+local lastMidPathKey = nil
+
+local function IsMidEarlyWindow()
+	local t = DotaTime()
+	return t >= 30 and t <= 180 and bot:GetAssignedLane() == LANE_MID
+end
+
+local function LogMidPath(tag, detail)
+	if IsMidEarlyWindow() then
+		local key = tag .. '|' .. detail
+		if key ~= lastMidPathKey then
+			lastMidPathKey = key
+			print('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail)
+		end
+	end
+end
+
 local function IsValid(hUnit)
 	return hUnit ~= nil and not hUnit:IsNull() and hUnit:IsAlive()
 end
@@ -116,6 +134,8 @@ function Generic.GetDesire()
 			-- Laning: allow hero attacks if not recently damaged and numbers ok
 			if J.IsInLaningPhase() and not bot:WasRecentlyDamagedByAnyHero(3.0) and not bot:WasRecentlyDamagedByCreep(2.0) and #nInRangeAlly >= #nInRangeEnemy then
 				if not J.IsRetreating(bot) and GetUnitToUnitDistance(bot, enemyHero) < botAttackRange then
+					LogMidPath('EngageGate', 'gate=LaneTrade allow=true reason=recent_damage_clear_and_numbers_ok target=' .. enemyHero:GetUnitName())
+					LogMidPath('ModeWinner', 'mode=ATTACK desire=VERYHIGH reason=laning_trade target=' .. enemyHero:GetUnitName())
 					return GetActualDesire(BOT_MODE_DESIRE_VERYHIGH)
 				end
 			end
@@ -147,10 +167,21 @@ function Generic.GetDesire()
 				if dist <= 2000 or ((dist / bot:GetCurrentMovementSpeed()) <= 10.0) then
 					if J.IsInLaningPhase() and bot:GetActiveMode() == BOT_MODE_ATTACK then
 						if bot:WasRecentlyDamagedByTower(2.0) or (J.IsValidBuilding(tEnemyTowers[1]) and tEnemyTowers[1]:GetAttackTarget() == bot) then
+							LogMidPath('EngageGate', 'gate=TowerDive allow=false reason=tower_pressure target=' .. enemyHero:GetUnitName())
+							if not badEventCaptured and IsMidEarlyWindow() then
+								badEventCaptured = true
+								LogMidPath('BadEvent', 'id=tower_pressure_denial chain=ModeAttack->ConsiderEnemyHero->EngageGateTowerPressure->NoCommand target=' .. enemyHero:GetUnitName())
+							end
 							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
 						end
 					end
-					if b3 then return GetActualDesire(BOT_MODE_DESIRE_ABSOLUTE) end
+					if b3 then
+						LogMidPath('EngageGate', 'gate=TeamFightWindow allow=true reason=team_fight_location target=' .. enemyHero:GetUnitName())
+						LogMidPath('ModeWinner', 'mode=ATTACK desire=ABSOLUTE reason=team_fight_window target=' .. enemyHero:GetUnitName())
+						return GetActualDesire(BOT_MODE_DESIRE_ABSOLUTE)
+					end
+					LogMidPath('EngageGate', 'gate=DamageAdvantage allow=true reason=b1_or_b2 target=' .. enemyHero:GetUnitName())
+					LogMidPath('ModeWinner', 'mode=ATTACK desire=VERYHIGH reason=damage_advantage target=' .. enemyHero:GetUnitName())
 					return GetActualDesire(BOT_MODE_DESIRE_VERYHIGH)
 				else
 					return GetActualDesire(BOT_MODE_DESIRE_MODERATE)
@@ -219,6 +250,7 @@ function Generic.GetDesire()
 
 	botTarget.fogChase = false
 
+	LogMidPath('ModeWinner', 'mode=ATTACK desire=NONE reason=no_valid_engage')
 	return GetActualDesire(BOT_MODE_DESIRE_NONE)
 end
 
@@ -341,40 +373,47 @@ function Generic.Think()
 		local dist = GetUnitToUnitDistance(bot, __target)
 		botAttackRange = bot:GetAttackRange() + bot:GetBoundingRadius()
 
+		LogMidPath('PrimaryTarget', 'target=' .. __target:GetUnitName() .. ' dist=' .. math.floor(dist) .. ' score=' .. string.format('%.2f', targetScore))
 		botTarget.unit = __target
 		botTarget.location = __target:GetExtrapolatedLocation(3.0)
 		botTarget.id = __target:GetPlayerID()
 		bot:SetTarget(__target)
 
-		-- Melee vs ranged positioning
-		if botAttackRange < 330 and botName ~= 'npc_dota_hero_templar_assassin' then
-			if dist < botAttackRange then
-				if not J.CanBeAttacked(__target) then
-					bot:Action_MoveToLocation(__target:GetLocation())
-				else
-					bot:Action_AttackUnit(__target, true)
-				end
-			else
-				bot:Action_MoveToLocation(__target:GetLocation())
-			end
-			return
-		else
-			-- Ranged: kite when target can't be attacked
-			if dist < botAttackRange then
-				if not J.CanBeAttacked(__target) then
-					if dist < botAttackRange - 100 then
-						bot:Action_MoveToLocation(J.VectorAway(botLocation, __target:GetLocation(), botAttackRange - dist - 100))
-					elseif dist > botAttackRange - 100 then
-						bot:Action_MoveToLocation(J.VectorTowards(botLocation, __target:GetLocation(), dist - botAttackRange - 100))
+			-- Melee vs ranged positioning
+			if botAttackRange < 330 and botName ~= 'npc_dota_hero_templar_assassin' then
+				if dist < botAttackRange then
+					if not J.CanBeAttacked(__target) then
+						LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
+						bot:Action_MoveToLocation(__target:GetLocation())
+					else
+						LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
+						bot:Action_AttackUnit(__target, true)
 					end
 				else
-					bot:Action_AttackUnit(__target, true)
+					bot:Action_MoveToLocation(__target:GetLocation())
 				end
+				return
 			else
-				bot:Action_MoveToLocation(__target:GetLocation())
+				-- Ranged: kite when target can't be attacked
+				if dist < botAttackRange then
+					if not J.CanBeAttacked(__target) then
+						if dist < botAttackRange - 100 then
+							LogMidPath('Command', 'action=KiteAway target=' .. __target:GetUnitName())
+							bot:Action_MoveToLocation(J.VectorAway(botLocation, __target:GetLocation(), botAttackRange - dist - 100))
+						elseif dist > botAttackRange - 100 then
+							LogMidPath('Command', 'action=KiteTowards target=' .. __target:GetUnitName())
+							bot:Action_MoveToLocation(J.VectorTowards(botLocation, __target:GetLocation(), dist - botAttackRange - 100))
+						end
+					else
+						LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
+						bot:Action_AttackUnit(__target, true)
+					end
+				else
+					LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
+					bot:Action_MoveToLocation(__target:GetLocation())
+				end
+				return
 			end
-			return
-		end
 	end
 
 	-- Help ally movement
