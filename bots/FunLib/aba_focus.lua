@@ -145,13 +145,35 @@ local function computeFocus()
                         elseif state == "post" then spikeBonus = -0.1 end
                     end
 
-                    local score = 2.0 * isolated + 1.6 * lowHP + 0.6 * reach + 0.4 * isCore + spikeBonus
+                    -- Buyback gate (esports.net HG-siege rule): if dead
+                    -- target can buy back, the kill commit is wasted —
+                    -- they respawn at full HP and walk straight back.
+                    -- Only matters in the buyback-relevant phase (>25min
+                    -- when buybacks have meaningful cost vs net worth).
+                    -- 0.75 multiplier nudges the picker toward targets
+                    -- without bb gold, but doesn't hard-skip.
+                    --
+                    -- See docs/SOURCES.md for the source rule.
+                    local bbPenalty = 1.0
+                    if heroUnit ~= nil and now > 25 * 60 then
+                        local okBB, bbCost = pcall(function() return heroUnit:GetBuybackCost() end)
+                        local okGold, gold = pcall(function() return heroUnit:GetGold() end)
+                        if okBB and okGold and type(bbCost) == "number"
+                           and type(gold) == "number" and gold >= bbCost then
+                            bbPenalty = 0.75
+                        end
+                    end
+
+                    local score = (2.0 * isolated + 1.6 * lowHP + 0.6 * reach + 0.4 * isCore + spikeBonus) * bbPenalty
 
                     if score > bestScore then
                         bestScore = score
                         local reasonStr = describeReason(isolated, hp, #ourNear, isCore)
                         if spikeBonus ~= 0 then
                             reasonStr = reasonStr .. ",spike=" .. tostring(spikeBonus > 0 and "+" .. string.format("%.1f", spikeBonus) or string.format("%.1f", spikeBonus))
+                        end
+                        if bbPenalty < 1.0 then
+                            reasonStr = reasonStr .. ",has-bb"
                         end
                         bestResult = {
                             unit = heroUnit,

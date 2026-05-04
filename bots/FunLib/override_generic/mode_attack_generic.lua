@@ -164,9 +164,32 @@ function Generic.GetDesire()
 					-- post-laning. User: "the bots just dive the towers."
 					-- Now fires whenever bot is taking tower hits OR
 					-- a tower is currently auto-targeting bot OR bot is
-					-- inside tower attack range (700u). Skipped only when
-					-- bot has an immortal-frame buff or we're in a real
-					-- teamfight (b3) with team-fight-location commitment.
+					-- inside tower attack range (700u).
+					--
+					-- Two skip layers:
+					--   - Hard skip: low-HP suppression. Even with an
+					--     immortal-frame buff, diving at <30% HP usually
+					--     dies after the frame ends (Satanic/BT/etc. all
+					--     have ~5s windows; tower deals ~150/swing). This
+					--     is from adamqqq's PushUtility AttackedByTowerRate
+					--     gate, which requires hp >= 0.7 + 0.1*enemyCount
+					--     for tower-tank to be considered safe.
+					--   - Soft skip: immortal-frame OR teamfight commit.
+					--     Lets a Bristleback-type or a 5-man dive proceed.
+					local hpFractionForDive = 0.30
+					if botHP < hpFractionForDive then
+						-- Even with BT/Satanic/etc., low-HP tower dive is
+						-- a death sentence. Suppress.
+						local divingNow = false
+						if bot:WasRecentlyDamagedByTower(2.0) then divingNow = true end
+						if J.IsValidBuilding(tEnemyTowers[1]) then
+							if tEnemyTowers[1]:GetAttackTarget() == bot then divingNow = true end
+							if GetUnitToUnitDistance(bot, tEnemyTowers[1]) < 700 then divingNow = true end
+						end
+						if divingNow then
+							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
+						end
+					end
 					if not b3
 					   and not bot:HasModifier('modifier_abaddon_borrowed_time')
 					   and not bot:HasModifier('modifier_item_satanic_unholy')
