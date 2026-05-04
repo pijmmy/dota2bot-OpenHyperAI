@@ -14,6 +14,19 @@ local botAttackRange, botHP, botMP, botHealth, botAttackDamage, botAttackSpeed, 
 local fLastAttackDesire = 0
 local bClearMode = false
 
+local badEventCaptured = false
+
+local function IsMidEarlyWindow()
+	local t = DotaTime()
+	return t >= 30 and t <= 180 and bot:GetAssignedLane() == LANE_MID
+end
+
+local function LogMidPath(tag, detail)
+	if IsMidEarlyWindow() then
+		print('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail)
+	end
+end
+
 local function IsValid(hUnit)
 	return hUnit ~= nil and not hUnit:IsNull() and hUnit:IsAlive()
 end
@@ -116,6 +129,8 @@ function Generic.GetDesire()
 			-- Laning: allow hero attacks if not recently damaged and numbers ok
 			if J.IsInLaningPhase() and not bot:WasRecentlyDamagedByAnyHero(3.0) and not bot:WasRecentlyDamagedByCreep(2.0) and #nInRangeAlly >= #nInRangeEnemy then
 				if not J.IsRetreating(bot) and GetUnitToUnitDistance(bot, enemyHero) < botAttackRange then
+					LogMidPath('EngageGate', 'gate=LaneTrade allow=true reason=recent_damage_clear_and_numbers_ok target=' .. enemyHero:GetUnitName())
+					LogMidPath('ModeWinner', 'mode=ATTACK desire=VERYHIGH reason=laning_trade target=' .. enemyHero:GetUnitName())
 					return GetActualDesire(BOT_MODE_DESIRE_VERYHIGH)
 				end
 			end
@@ -147,10 +162,21 @@ function Generic.GetDesire()
 				if dist <= 2000 or ((dist / bot:GetCurrentMovementSpeed()) <= 10.0) then
 					if J.IsInLaningPhase() and bot:GetActiveMode() == BOT_MODE_ATTACK then
 						if bot:WasRecentlyDamagedByTower(2.0) or (J.IsValidBuilding(tEnemyTowers[1]) and tEnemyTowers[1]:GetAttackTarget() == bot) then
+							LogMidPath('EngageGate', 'gate=TowerDive allow=false reason=tower_pressure target=' .. enemyHero:GetUnitName())
+							if not badEventCaptured and IsMidEarlyWindow() then
+								badEventCaptured = true
+								LogMidPath('BadEvent', 'id=tower_pressure_denial chain=ModeAttack->ConsiderEnemyHero->EngageGateTowerPressure->NoCommand target=' .. enemyHero:GetUnitName())
+							end
 							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
 						end
 					end
-					if b3 then return GetActualDesire(BOT_MODE_DESIRE_ABSOLUTE) end
+					if b3 then
+						LogMidPath('EngageGate', 'gate=TeamFightWindow allow=true reason=team_fight_location target=' .. enemyHero:GetUnitName())
+						LogMidPath('ModeWinner', 'mode=ATTACK desire=ABSOLUTE reason=team_fight_window target=' .. enemyHero:GetUnitName())
+						return GetActualDesire(BOT_MODE_DESIRE_ABSOLUTE)
+					end
+					LogMidPath('EngageGate', 'gate=DamageAdvantage allow=true reason=b1_or_b2 target=' .. enemyHero:GetUnitName())
+					LogMidPath('ModeWinner', 'mode=ATTACK desire=VERYHIGH reason=damage_advantage target=' .. enemyHero:GetUnitName())
 					return GetActualDesire(BOT_MODE_DESIRE_VERYHIGH)
 				else
 					return GetActualDesire(BOT_MODE_DESIRE_MODERATE)
@@ -219,6 +245,7 @@ function Generic.GetDesire()
 
 	botTarget.fogChase = false
 
+	LogMidPath('ModeWinner', 'mode=ATTACK desire=NONE reason=no_valid_engage')
 	return GetActualDesire(BOT_MODE_DESIRE_NONE)
 end
 
@@ -341,6 +368,7 @@ function Generic.Think()
 		local dist = GetUnitToUnitDistance(bot, __target)
 		botAttackRange = bot:GetAttackRange() + bot:GetBoundingRadius()
 
+		LogMidPath('PrimaryTarget', 'target=' .. __target:GetUnitName() .. ' dist=' .. math.floor(dist) .. ' score=' .. string.format('%.2f', targetScore))
 		botTarget.unit = __target
 		botTarget.location = __target:GetExtrapolatedLocation(3.0)
 		botTarget.id = __target:GetPlayerID()
@@ -350,8 +378,10 @@ function Generic.Think()
 		if botAttackRange < 330 and botName ~= 'npc_dota_hero_templar_assassin' then
 			if dist < botAttackRange then
 				if not J.CanBeAttacked(__target) then
-					bot:Action_MoveToLocation(__target:GetLocation())
+					LogMidPath('Command', 'action=MoveToTarget target=' .. __target:GetUnitName())
+				bot:Action_MoveToLocation(__target:GetLocation())
 				else
+					LogMidPath('Command', 'action=AttackUnit target=' .. __target:GetUnitName())
 					bot:Action_AttackUnit(__target, true)
 				end
 			else
