@@ -8551,13 +8551,41 @@ local function UseScan()
 	end
 end
 
+-- Per-tick error capture. The Dota engine calls these entry points
+-- every frame for every bot. The 07:38 error cascade fired ~10 times
+-- per tick before being squelched, which means the failure is in one
+-- of the *Complement functions called below. Wrapping each call in
+-- xpcall + chat-on-first-failure surfaces the actual error text and
+-- traceback to console.NNN.log via the proven chat channel.
+--
+-- Limit: 1 chat per (function, error-prefix) per bot per game.
+-- Without this, a per-tick error spams chat hundreds of times.
+local _safeSeen = {}
+local function _ohaSafeCall(tag, fn, ...)
+	if fn == nil then return end
+	local args = {...}
+	local ok, err = xpcall(
+		function() return fn(unpack(args)) end,
+		function(e) return tostring(e) .. ' | ' .. (debug and debug.traceback() or '') end
+	)
+	if not ok then
+		local key = tag .. '|' .. tostring(err):sub(1, 60)
+		if not _safeSeen[key] then
+			_safeSeen[key] = true
+			pcall(function()
+				bot:ActionImmediate_Chat("[OHA-TICK-ERR] "..botName.." fn="..tag.." err="..tostring(err):sub(1, 220), false)
+			end)
+		end
+	end
+end
+
 function ItemUsageThink()
 	if RefreshBotHandle() then return end
 	if bot:IsInvulnerable() or not bot:IsHero() or not bot:IsAlive() or not string.find(botName, "hero") or bot:IsIllusion() then return end
 	if bot.lastItemFrameProcessTime == nil then bot.lastItemFrameProcessTime = DotaTime() end
 	if DotaTime() > 30 and (DotaTime() - bot.lastItemFrameProcessTime < (bot.frameProcessTime * (1 + Customize.ThinkLess))) then return end
 	bot.lastItemFrameProcessTime = DotaTime()
-	if not J.IsNoItemIllution(bot) then ItemUsageComplement() end
+	if not J.IsNoItemIllution(bot) then _ohaSafeCall('ItemUsageComplement', ItemUsageComplement) end
 end
 
 function AbilityUsageThink()
@@ -8566,7 +8594,7 @@ function AbilityUsageThink()
 	if bot.lastAbilityFrameProcessTime == nil then bot.lastAbilityFrameProcessTime = DotaTime() end
 	if DotaTime() > 30 and (DotaTime() - bot.lastAbilityFrameProcessTime < (bot.frameProcessTime * (1 + Customize.ThinkLess))) and bot.isBear == nil then return end
 	bot.lastAbilityFrameProcessTime = DotaTime()
-	if BotBuild ~= nil and not J.IsNoAbilityIllution(bot) then BotBuild.SkillsComplement() end
+	if BotBuild ~= nil and not J.IsNoAbilityIllution(bot) then _ohaSafeCall('SkillsComplement', BotBuild.SkillsComplement) end
 end
 
 function BuybackUsageThink()
@@ -8574,9 +8602,9 @@ function BuybackUsageThink()
 	if bot.lastBuybackFrameProcessTime == nil then bot.lastBuybackFrameProcessTime = DotaTime() end
 	if DotaTime() > 30 and (DotaTime() - bot.lastBuybackFrameProcessTime < 2) then return end
 	bot.lastBuybackFrameProcessTime = DotaTime()
-	if not bot:IsIllusion() then BuybackUsageComplement() end
-	if not bot:IsIllusion() then UseGlyph() end
-	if not bot:IsIllusion() then UseScan() end
+	if not bot:IsIllusion() then _ohaSafeCall('BuybackUsageComplement', BuybackUsageComplement) end
+	if not bot:IsIllusion() then _ohaSafeCall('UseGlyph', UseGlyph) end
+	if not bot:IsIllusion() then _ohaSafeCall('UseScan', UseScan) end
 end
 
 function CourierUsageThink()
@@ -8584,7 +8612,7 @@ function CourierUsageThink()
 	if bot.lastCourierFrameProcessTime == nil then bot.lastCourierFrameProcessTime = DotaTime() end
 	if DotaTime() > 30 and (DotaTime() - bot.lastCourierFrameProcessTime < 0.5) then return end
 	bot.lastCourierFrameProcessTime = DotaTime()
-	if not bot:IsIllusion() then CourierUsageComplement() end
+	if not bot:IsIllusion() then _ohaSafeCall('CourierUsageComplement', CourierUsageComplement) end
 end
 
 function AbilityLevelUpThink()
@@ -8592,7 +8620,7 @@ function AbilityLevelUpThink()
 	if bot.lastLevelUpFrameProcessTime == nil then bot.lastLevelUpFrameProcessTime = DotaTime() end
 	if DotaTime() > 30 and (DotaTime() - bot.lastLevelUpFrameProcessTime < 1) then return end
 	bot.lastLevelUpFrameProcessTime = DotaTime()
-	if not bot:IsIllusion() then AbilityLevelUpComplement() end
+	if not bot:IsIllusion() then _ohaSafeCall('AbilityLevelUpComplement', AbilityLevelUpComplement) end
 end
 
 function X.SetAbilityItemList(heroAbility, items, abilityLvlup)
