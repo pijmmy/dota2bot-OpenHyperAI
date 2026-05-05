@@ -99,7 +99,15 @@ function GetDesireInner()
 	-- 	return 0.2
 	-- end
 
-	if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
+	-- Position-aware gate: pos 4/5 supports run our smarter laning Think
+	-- so the GetBestLastHitCreep helper's `isCoreAllyInRangeOfCreep` skip
+	-- can suppress last-hits a core ally is positioned to take. Without
+	-- this, supports compete with the carry for gold via Dota's default
+	-- last-hit logic, which has no understanding of role priorities.
+	-- Audit: mode_laning_generic.lua:209 (Think gate).
+	local _botPosOk, _botPos = pcall(function() return J.GetPosition(bot) end)
+	local _botIsSupport = _botPosOk and _botPos ~= nil and _botPos >= 4
+	if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) or _botIsSupport then
 		-- last hit
 		if J.IsInLaningPhase() then
 			local hitCreep, _ = GetBestLastHitCreep(nEnemyCreeps)
@@ -206,7 +214,14 @@ function GetBestDenyCreep(hCreepList)
 	return nil
 end
 
-if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
+-- Position-aware Think gate: matches the GetDesire gate above. Pos 4/5
+-- supports get the smarter Think with `isCoreAllyInRangeOfCreep` skip
+-- so the carry doesn't get the gold from creeps a support could nick.
+local function _thinkGateBotIsSupport()
+	local ok, p = pcall(function() return J.GetPosition(bot) end)
+	return ok and p ~= nil and p >= 4
+end
+if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) or _thinkGateBotIsSupport() then
 	function Think()
 		local hitCreep, moveToCreep = GetBestLastHitCreep(nEnemyCreeps)
 		if J.IsValid(hitCreep) then
