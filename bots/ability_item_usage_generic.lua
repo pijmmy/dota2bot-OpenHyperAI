@@ -4,6 +4,21 @@ local botName = bot:GetUnitName()
 if bot == nil or bot:IsInvulnerable() or not bot:IsHero() or not string.find(botName, "hero") or bot:IsIllusion() then return end
 if not bot.frameProcessTime then bot.frameProcessTime = 0.1 end
 
+-- ============================================================
+-- Diagnostic probe (May 2026): determine which output channel
+-- actually reaches console.NNN.log in this Dota build. Three
+-- channels tested in parallel:
+--   1. print()          - standard
+--   2. Say()            - global Say function
+--   3. ActionImmediate_Chat - team chat (known to be logged via
+--                              Localization system warnings)
+-- Each fires ONCE per script load. If any reach the log, that's
+-- the channel I use for real error reporting on subsequent runs.
+-- See docs/SOURCES.md / commit log for context.
+print("[OHA-PROBE-PRINT] ability_item_usage loaded for "..botName)
+pcall(function() Say(bot, "[OHA-PROBE-SAY] "..botName, false) end)
+pcall(function() bot:ActionImmediate_Chat("[OHA-PROBE-CHAT] "..botName, false) end)
+
 local team = GetTeam()
 local bDebugMode = ( 10 == 10 )
 
