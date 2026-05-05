@@ -197,6 +197,17 @@ local nKeepMana, nMP, nHP, nLV, hEnemyList, hAllyList, botTarget, sMotive, nInRa
 
 local aetherRange = 0
 
+-- Time-gated harass: limits Q/W lane-harass casts to once per HARASS_GAP
+-- seconds. Without this, every tick that finds an enemy hero in 1200 range
+-- with mana > 50% queues another Q/W. The queue cycle calls
+-- J.SetQueuePtToINT -> Action_ClearActions, which CANCELS any pending
+-- auto-attack on a creep. Result: Skywrath's auto-attack last-hits never
+-- complete. Audit: hero_skywrath_mage.lua ConsiderQ:319 + ConsiderW:446.
+local HARASS_GAP_Q = 5.0
+local HARASS_GAP_W = 8.0
+local nLastQHarassTime = -100
+local nLastWHarassTime = -100
+
 function X.SkillsComplement()
 
 	if J.CanNotUseAbility( bot ) or bot:IsInvisible() then return end
@@ -245,6 +256,10 @@ function X.SkillsComplement()
 
 		J.SetQueuePtToINT( bot, true )
 
+		if string.find( sMotive or "", "消耗" ) then
+			nLastWHarassTime = DotaTime()
+		end
+
 		bot:ActionQueue_UseAbility( abilityW )
 		return
 	end
@@ -255,6 +270,12 @@ function X.SkillsComplement()
 		J.SetReportMotive( bDebugMode, sMotive )
 
 		J.SetQueuePtToINT( bot, true )
+
+		-- Track time of harass cast so the per-tick gate works. Only need
+		-- this for the harass branch but stamping always is harmless.
+		if string.find( sMotive or "", "消耗" ) then
+			nLastQHarassTime = DotaTime()
+		end
 
 		bot:ActionQueue_UseAbilityOnEntity( abilityQ, castQTarget )
 		return
@@ -316,7 +337,13 @@ function X.ConsiderQ()
 				end
 			end
 		end
-		if #nInRangeEnemyHeroList >= 1 and nMP > 0.5 and nSkillLV >= 2 then
+		-- Time-gate harass: if we just harassed in the last HARASS_GAP_Q
+		-- seconds, let auto-attacks claim creep last-hits before queueing
+		-- another Q. The previous unconditional cast cleared the queue and
+		-- preempted the auto-attack on every tick the condition matched.
+		if #nInRangeEnemyHeroList >= 1 and nMP > 0.5 and nSkillLV >= 2
+			and DotaTime() - nLastQHarassTime > HARASS_GAP_Q
+		then
 			local npcEnemy = nInRangeEnemyHeroList[1]
 			if J.IsValidHero(npcEnemy)
 			and J.IsInRange(bot, npcEnemy, nCastRange) then
@@ -443,7 +470,14 @@ function X.ConsiderW()
 
 	--对线期的使用
 	if J.IsLaning( bot ) then
-		if #nInRangeEnemyHeroList >= 1 and nMP > 0.5 and (nSkillLV >= 2 or nLV <= 2) then
+		-- Time-gate W harass too. Concussive Shot has a 12s base cooldown but
+		-- the lane-harass branch fires every tick where condition matches; if
+		-- it returns desire HIGH while W is on cooldown, ConsiderW returns 0
+		-- at line 423 — ok. But once off cooldown, W is queued every tick
+		-- the condition matches, again clearing pending auto-attacks.
+		if #nInRangeEnemyHeroList >= 1 and nMP > 0.5 and (nSkillLV >= 2 or nLV <= 2)
+			and DotaTime() - nLastWHarassTime > HARASS_GAP_W
+		then
 			local npcEnemy = nInRangeEnemyHeroList[1]
 			if J.IsValidHero(npcEnemy)
 			and J.IsInRange(bot, npcEnemy, nCastRange) then
