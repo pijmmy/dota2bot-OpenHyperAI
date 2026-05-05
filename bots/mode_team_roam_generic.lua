@@ -168,6 +168,22 @@ function GetDesireHelper()
             "team_roam_engage", _engageGateFresh, 1.5)
     end
 
+    -- Passivity fix: when team plan is `commit_kill` or `lane_gank`, the
+    -- team intent is "press this kill NOW". Without this override, bots
+    -- wait for ally>=enemy parity in 2000u — which rarely holds in early
+    -- mid game, so commit_kill plans never convert to actual roams. Force
+    -- the engage gate true for the validity window of the plan.
+    -- Audit: mode_team_roam_generic.lua engage gate vs team plan layer.
+    if J.TeamPlan and J.TeamPlan.GetCurrentPlan then
+        local _plan = J.TeamPlan.GetCurrentPlan()
+        if _plan ~= nil and _plan.intent ~= nil
+           and (_plan.intent == 'commit_kill' or _plan.intent == 'lane_gank' or _plan.intent == 'smoke_gank')
+           and _plan.validUntil ~= nil and DotaTime() < _plan.validUntil
+        then
+            _engageGateHeld = true
+        end
+    end
+
     if not J.IsFarming(bot) and not J.IsPushing(bot) and not J.IsDefending(bot)
     and not J.IsDoingRoshan(bot) and not J.IsDoingTormentor(bot)
     and bot:GetActiveMode() ~= BOT_MODE_RUNE
