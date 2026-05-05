@@ -318,6 +318,7 @@ function X.ConsiderBreatheFire()
 		and not botTarget:HasModifier('modifier_dragonknight_breathefire_reduction')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			if J.CanCastAbility(ElderDragonForm) then
 				if fManaAfter > fManaThreshold2 then
@@ -570,6 +571,7 @@ function X.ConsiderDragonTail()
 		and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
 		and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget
 		end
@@ -652,6 +654,7 @@ function X.ConsiderFireball()
 		and not J.IsChasingTarget(bot, botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and fManaAfter > fManaThreshold1
         then
             return BOT_ACTION_DESIRE_HIGH, botTarget:GetLocation()
@@ -722,15 +725,15 @@ function X.ConsiderElderDragonForm()
 		and J.CanBeAttacked(botTarget)
 		and not J.IsSuspiciousIllusion(botTarget)
 		then
-			local nInRangeAlly = J.GetAlliesNearLoc(bot:GetLocation(), 1200)
+			-- Dropped over-cautious "+2 advantage" guard (same pattern as Doom).
+			-- DK Elder Dragon Form is most valuable mid-fight; saving it for
+			-- close fights only meant the bot skipped it during winning pushes.
 			local nInRangeEnemy = J.GetEnemiesNearLoc(bot:GetLocation(), 1200)
-			if not (#nInRangeAlly >= #nInRangeEnemy + 2) then
-				if #nInRangeEnemy >= 2 then
+			if #nInRangeEnemy >= 2 then
+				return BOT_ACTION_DESIRE_HIGH
+			else
+				if not botTarget:HasModifier('modifier_necrolyte_reapers_scythe') then
 					return BOT_ACTION_DESIRE_HIGH
-				else
-					if not botTarget:HasModifier('modifier_necrolyte_reapers_scythe') then
-						return BOT_ACTION_DESIRE_HIGH
-					end
 				end
 			end
 		end

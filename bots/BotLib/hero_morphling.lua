@@ -321,6 +321,7 @@ function X.ConsiderWaveform()
 		and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetAlliesNearLoc(bot:GetLocation(), 1200)
             local nInRangeEnemy = J.GetEnemiesNearLoc(botTarget:GetLocation(), 1200)
@@ -519,6 +520,7 @@ function X.ConsiderAdaptiveStrikeAGI()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_ursa_enrage')
 		then
             return BOT_ACTION_DESIRE_HIGH, botTarget
@@ -765,6 +767,7 @@ function X.ConsiderAtttributeShift()
             and (J.CanBeAttacked(botTarget) or #nInRangeEnemy > 1)
             and J.IsInRange(bot, botTarget, botAttackRange + 300)
             and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(botTarget)
             then
                 local ratio = RemapValClamped(botNetworth, 5000, 25000, 0.5, 0.85)
 

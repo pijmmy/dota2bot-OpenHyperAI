@@ -298,6 +298,7 @@ function X.ConsiderNaturesGrasp()
         and not strongestTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not strongestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(strongestTarget)
         and J.GetMP(bot) > 0.75
 		then
             return BOT_ACTION_DESIRE_HIGH, strongestTarget:GetLocation()
@@ -379,6 +380,7 @@ function X.ConsiderLeechSeed()
             and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
             and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             and not enemyHero:HasModifier('modifier_treant_natures_grasp_damage')
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)

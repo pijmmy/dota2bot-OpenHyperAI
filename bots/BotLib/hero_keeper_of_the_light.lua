@@ -285,6 +285,7 @@ function X.ConsiderIlluminate()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget:GetLocation()
 		end
@@ -449,6 +450,7 @@ function X.ConsiderBlindingLight()
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_legion_commander_duel')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             if J.IsChasingTarget(bot, botTarget) then
                 -- Place the light behind the target so the push goes toward us
@@ -558,6 +560,7 @@ function X.ConsiderSolarBind()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_keeper_of_the_light_radiant_bind')
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget
@@ -682,6 +685,7 @@ function X.ConsiderSpiritForm()
         and J.IsInRange(bot, botTarget, 1200)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_troll_warlord_battle_trance')
         and not botTarget:HasModifier('modifier_ursa_enrage')
 		then

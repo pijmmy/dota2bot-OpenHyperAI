@@ -110,8 +110,11 @@ function GetDesireHelper()
     local target
     target, ShouldHelpWhenCoreIsTargeted = X.ConsiderHelpWhenCoreIsTargeted()
     if ShouldHelpWhenCoreIsTargeted then
+        -- Hysteresis: SetStickyTarget already updates targetUnit + calls
+        -- bot:SetTarget when its 1.2s lock allows. The previous redundant
+        -- `targetUnit = target` assignment defeated that lock — see the
+        -- engineering-discipline trace in commit 3d9fc95 for context.
         SetStickyTarget(target)
-        targetUnit = target
         return RemapValClamped(J.GetHP(bot), 0, 0.5, BOT_MODE_DESIRE_NONE, 0.98)
     end
 
@@ -121,7 +124,6 @@ function GetDesireHelper()
     target, ShouldHelpAlly = ConsiderHelpAlly()
     if ShouldHelpAlly then
         SetStickyTarget(target)
-        targetUnit = target
         return RemapValClamped(J.GetHP(bot), 0, 0.6, BOT_MODE_DESIRE_NONE, 0.98)
     end
 
@@ -150,6 +152,22 @@ function GetDesireHelper()
         return RemapValClamped(J.GetHP(bot), 0.3, 1, BOT_ACTION_DESIRE_VERYHIGH, BOT_ACTION_DESIRE_NONE)
     end
 
+    -- The ally>=enemy gate flickers when a hero crosses the 2000u
+    -- last-seen boundary or its time_since_seen wraps the 5s window.
+    -- Fresh = "engage" or "disengage", per tick. Bot oscillates between
+    -- attack and retreat. Apply StickyGate (1.5s hold) so once we
+    -- decide to engage, we stay engaged for ~1 attack swing minimum
+    -- and don't flip on a single fogged-enemy timer expiring.
+    --
+    -- Audit: mode_team_roam_generic.lua:165 (RISK 3).
+    -- See bots/FunLib/aba_hysteresis.lua + docs/SOURCES.md.
+    local _engageGateFresh = (#nearbyAllies >= #nearbyEnemies)
+    local _engageGateHeld = _engageGateFresh
+    if J.Hysteresis and J.Hysteresis.StickyGate then
+        _engageGateHeld = J.Hysteresis.StickyGate(bot:GetPlayerID(),
+            "team_roam_engage", _engageGateFresh, 1.5)
+    end
+
     if not J.IsFarming(bot) and not J.IsPushing(bot) and not J.IsDefending(bot)
     and not J.IsDoingRoshan(bot) and not J.IsDoingTormentor(bot)
     and bot:GetActiveMode() ~= BOT_MODE_RUNE
@@ -160,20 +178,24 @@ function GetDesireHelper()
     and bot:GetActiveMode() ~= BOT_MODE_DEFEND_ALLY
     and bot:GetActiveMode() ~= BOT_MODE_ROAM then
         return BOT_ACTION_DESIRE_NONE
-    elseif #nearbyAllies >= #nearbyEnemies then
+    elseif _engageGateHeld then
         if IsHeroCore then
             local botTarget, targetDesire = X.CarryFindTarget()
             if botTarget ~= nil then
-                targetUnit = botTarget
-                bot:SetTarget(botTarget)
+                -- Was: bypassed SetStickyTarget hysteresis with direct
+                -- targetUnit + bot:SetTarget assignment. Per-tick CarryFindTarget
+                -- can pick different targets in similar-priority scenarios
+                -- (Doom-vs-broodmother + spiderlings: low-HP swarmers compete
+                -- with brood for "lowest HP wins"). Routing through SetStickyTarget
+                -- enforces the 1.2s lock so target stays stable.
+                SetStickyTarget(botTarget)
                 return RemapValClamped(J.GetHP(bot), 0, 0.4, BOT_MODE_DESIRE_NONE, targetDesire)
             end
         end
         if IsSupport then
             local botTarget, targetDesire = X.SupportFindTarget()
             if botTarget ~= nil then
-                targetUnit = botTarget
-                bot:SetTarget(botTarget)
+                SetStickyTarget(botTarget)
                 return RemapValClamped(J.GetHP(bot), 0, 0.4, BOT_MODE_DESIRE_NONE, targetDesire)
             end
         end
@@ -327,8 +349,19 @@ function Think()
        and plan.validUntil ~= nil and DotaTime() < plan.validUntil then
         local focusedTarget = J.Focus and J.Focus.GetFocusIfInRange and J.Focus.GetFocusIfInRange(bot, 1400) or nil
         if focusedTarget ~= nil and X.CanBeAttacked(focusedTarget) then
-            bot:Action_AttackUnit(focusedTarget, true)
-            return
+            -- Anti-dive: focus override could push bot into tower
+            -- range chasing the focused target. Skip override if we'd
+            -- be diving without immortal frame. The focus stays as the
+            -- "team intent" but this individual bot doesn't dive solo.
+            -- Audit: mode_team_roam_generic.lua:336 (RISK 3).
+            local focusLoc = focusedTarget:GetLocation()
+            if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+               and J.Safezone.WouldDiveIfMovedTo(bot, focusLoc, 0) then
+                -- Dive suppressed. Fall through to next decision.
+            else
+                bot:Action_AttackUnit(focusedTarget, true)
+                return
+            end
         end
     end
 

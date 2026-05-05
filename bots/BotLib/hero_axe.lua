@@ -244,12 +244,26 @@ function X.ConsiderQ()
 	then
 		if J.IsValidHero( botTarget )
 			and J.IsInRange( botTarget, bot, nRadius - 90 )
-			and J.CanCastOnNonMagicImmune( botTarget )			
+			and J.CanCastOnNonMagicImmune( botTarget )
 			and not J.IsDisabled( botTarget )
-		then			
-			hCastTarget = botTarget
-			sCastMotive = 'Q-先手'..J.Chat.GetNormName( hCastTarget )
-			return BOT_ACTION_DESIRE_HIGH, sCastMotive
+		then
+			-- Anti-dive (low-HP only): Axe is a designed dive-tank
+			-- (Counter Helix + Blade Mail + Blink). Allow Berserker's
+			-- Call dives at normal HP, but block at low HP (<30%)
+			-- where the 3s taunt locks Axe in melee range under tower
+			-- without escape options. Audit: hero_axe.lua ConsiderQ
+			-- (RISK 2 — designed dive-tank).
+			if J.GetHP(bot) < 0.30
+			   and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+			   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0) then
+				-- Axe at low HP under tower: skip the call. He still
+				-- wins his survival cooldown round (Helix + Blade Mail)
+				-- without committing to taunt-lock in tower range.
+			else
+				hCastTarget = botTarget
+				sCastMotive = 'Q-先手'..J.Chat.GetNormName( hCastTarget )
+				return BOT_ACTION_DESIRE_HIGH, sCastMotive
+			end
 		end
 	end
 	
@@ -558,10 +572,20 @@ function X.HasSpecialModifier( npcEnemy )
 		or npcEnemy:HasModifier( 'modifier_item_aeon_disk_buff' )
 		or npcEnemy:HasModifier( 'modifier_item_sphere_target' )
 		or npcEnemy:HasModifier( 'modifier_illusion' )
+		-- Damage-immunity / heal-on-damage modifiers — Culling Blade execute
+		-- through Borrowed Time HEALS the target. Through Reaper's Scythe /
+		-- Shallow Grave / False Promise / Refraction the kill is consumed
+		-- by the immune window. Treat as "skip target."
+		or npcEnemy:HasModifier( 'modifier_abaddon_borrowed_time' )
+		or npcEnemy:HasModifier( 'modifier_dazzle_shallow_grave' )
+		or npcEnemy:HasModifier( 'modifier_necrolyte_reapers_scythe' )
+		or npcEnemy:HasModifier( 'modifier_oracle_false_promise_timer' )
+		or npcEnemy:HasModifier( 'modifier_templar_assassin_refraction_absorb' )
+		or npcEnemy:HasModifier( 'modifier_skeleton_king_reincarnation_scepter_active' )
 	then
 		return true
 	else
-		return false	
+		return false
 	end
 
 end

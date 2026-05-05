@@ -647,6 +647,7 @@ function X.ConsiderR()
 	then
 		if J.IsValidHero( botTarget )
 			and J.CanCastOnNonMagicImmune( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 			and ( J.IsInRange( bot, botTarget, nCastRange + 88 )
 				  or J.IsInRange( bot, botTarget, bot:GetAttackRange() + 99 ) )
 		then

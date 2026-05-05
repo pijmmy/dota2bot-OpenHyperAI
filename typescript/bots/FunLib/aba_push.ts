@@ -18,6 +18,17 @@ const BOT_MODE_DESIRE_EXTRA_LOW = 0.02;
 /** Module-scoped state (cache-ish). Keep small and intentional. */
 let hEnemyAncient: Unit | null = null;
 
+/**
+ * Per-bot stickiness for the special-creep attack-target picker. Without
+ * this, the iteration order of GetSpecialUnitsNearby (which mixes creeps
+ * + summoned heroes — brood spiderlings, lycan wolves, lone druid bear,
+ * etc.) can vary tick-to-tick, making bot.Action_AttackUnit jump between
+ * spiderlings and the bot can't land an attack. Reported as the "Doom
+ * dithers at broodmother spiders" symptom.
+ */
+const _lastSpecialTarget: Record<number, { unit: Unit; expires: number }> = {};
+const SPECIAL_TARGET_LOCK_SEC = 1.5;
+
 /** Performance cache - avoid redundant calculations between GetPushDesire (300ms) and Think (every frame) */
 type CachedGameState = {
     lastUpdate: number;
@@ -847,6 +858,21 @@ export function PushThink(bot: Unit, lane: Lane): void {
     const bTowerNearby = jmz.IsValidBuilding(nEnemyTowers[0]); // only consider creeps "in front" of tower
     const towerDistanceToFountain = bTowerNearby ? GetUnitToLocationDistance(nEnemyTowers[0], vTeamFountain) : 0;
 
+    // Stickiness: reuse last-attacked special unit if still valid + in range.
+    // Prevents the per-tick reselection that causes brood-spiderling dither.
+    const pid = bot.GetPlayerID();
+    const cached = _lastSpecialTarget[pid];
+    if (cached && cached.expires > now) {
+        const u = cached.unit;
+        if (jmz.IsValid(u) && jmz.CanBeAttacked(u)
+            && !jmz.IsTormentor(u) && !jmz.IsRoshan(u)
+            && jmz.IsInRange(bot, u, nRange)
+            && (!bTowerNearby || GetUnitToLocationDistance(u, vTeamFountain) < towerDistanceToFountain)) {
+            bot.Action_AttackUnit(u, true);
+            return;
+        }
+    }
+
     for (const creep of nCreeps) {
         if (!jmz.IsValid(creep) || !jmz.CanBeAttacked(creep)) continue;
         if (jmz.IsTormentor(creep) || jmz.IsRoshan(creep)) continue;
@@ -854,6 +880,7 @@ export function PushThink(bot: Unit, lane: Lane): void {
         if (bTowerNearby && GetUnitToLocationDistance(creep, vTeamFountain) >= towerDistanceToFountain) continue;
 
         bot.Action_AttackUnit(creep, true);
+        _lastSpecialTarget[pid] = { unit: creep, expires: now + SPECIAL_TARGET_LOCK_SEC };
         return;
     }
 

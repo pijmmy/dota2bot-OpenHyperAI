@@ -400,6 +400,31 @@ function ____exports.ShouldEngage(focus_pid)
     return true
 end
 
+function ____exports.TeamfightReadiness()
+    local alliesReady = 0
+    local alliesAlive = 0
+    for i = 1, 5 do
+        local ally = GetTeamMember(i)
+        if ally ~= nil and ally:IsAlive() then
+            alliesAlive = alliesAlive + 1
+            local ults = ally:GetAbilityInSlot(5)
+            if ults ~= nil and ults:IsFullyCastable() then alliesReady = alliesReady + 1 end
+        end
+    end
+    local enemiesAlive = 0
+    local enemyTeam = GetOpposingTeam()
+    local eplayers = GetTeamPlayers(enemyTeam)
+    for i = 1, #eplayers do
+        if IsHeroAlive(eplayers[i]) then enemiesAlive = enemiesAlive + 1 end
+    end
+    local readyScore = 0.5
+    if alliesAlive > 0 then readyScore = readyScore + 0.20 * (alliesReady / alliesAlive) end
+    if enemiesAlive >= alliesAlive then readyScore = readyScore - 0.15 end
+    if enemiesAlive + 1 <= alliesAlive then readyScore = readyScore + 0.10 end
+    if countMissingEnemies(8) >= 3 then readyScore = readyScore - 0.10 end
+    return clamp01(readyScore)
+end
+
 -- Item 3: macro alert level. Drives intent multipliers (offensive intents
 -- dampened in YELLOW/RED, defensive amplified).
 function ____exports.GetMacroAlert()

@@ -493,19 +493,35 @@ function X.GetAvailabeObserverWardSpots(bot)
 	return availableSpots
 end
 
+-- Variance: instead of always picking the strict closest spot (which made
+-- bots place wards in identical spots every game — user complaint:
+-- "always place wards in the same place"), score by distance + recency
+-- and random-pick from top 3.
 function X.GetClosestObserverWardSpot(bot, spots)
-	local cDist = 100000
-	local cTarget = nil
+	if spots == nil then return nil end
+	local count = 0
+	for _ in pairs(spots) do count = count + 1 end
+	if count == 0 then return nil end
 
+	local now = DotaTime()
+	local scored = {}
 	for _, spot in pairs(spots) do
 		local dist = GetUnitToLocationDistance(bot, spot.location)
-		if dist < cDist then
-			cDist = dist
-			cTarget = spot
+		local recencyPenalty = 0
+		if spot.plant_time_obs and spot.plant_time_obs > 0 then
+			local age = now - spot.plant_time_obs
+			if age < 360 then
+				recencyPenalty = (360 - age) * 3
+			end
 		end
+		table.insert(scored, { spot = spot, score = dist + recencyPenalty })
 	end
 
-	return cTarget
+	table.sort(scored, function(a, b) return a.score < b.score end)
+	local pickFrom = math.min(3, #scored)
+	if pickFrom < 1 then return nil end
+	local idx = RandomInt(1, pickFrom)
+	return scored[idx].spot
 end
 
 function X.GetPossibleSentryWardSpots(bot)
@@ -637,18 +653,28 @@ function X.GetPossibleSentryWardSpots(bot)
 end
 
 function X.GetClosestSentryWardSpot(bot, spots)
-	local cDist = 100000
-	local cTarget = nil
-
+	if spots == nil then return nil end
+	local count = 0
+	for _ in pairs(spots) do count = count + 1 end
+	if count == 0 then return nil end
+	local now = DotaTime()
+	local scored = {}
 	for _, spot in pairs(spots) do
 		local dist = GetUnitToLocationDistance(bot, spot.location)
-		if dist < cDist then
-			cDist = dist
-			cTarget = spot
+		local recencyPenalty = 0
+		if spot.plant_time_sentry and spot.plant_time_sentry > 0 then
+			local age = now - spot.plant_time_sentry
+			if age < 210 then
+				recencyPenalty = (210 - age) * 4
+			end
 		end
+		table.insert(scored, { spot = spot, score = dist + recencyPenalty })
 	end
-
-	return cTarget
+	table.sort(scored, function(a, b) return a.score < b.score end)
+	local pickFrom = math.min(3, #scored)
+	if pickFrom < 1 then return nil end
+	local idx = RandomInt(1, pickFrom)
+	return scored[idx].spot
 end
 
 function X.IsOtherWardClose(vLocation, sWardName, nRadius, bTeam, bCheckLifespan)

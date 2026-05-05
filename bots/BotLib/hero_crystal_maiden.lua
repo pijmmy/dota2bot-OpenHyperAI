@@ -940,6 +940,7 @@ function X.ConsiderCrystalClone()
 		and J.CanCastOnNonMagicImmune(botTarget)
 		and not J.IsSuspiciousIllusion(botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
 			local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)

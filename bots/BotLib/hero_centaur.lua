@@ -174,6 +174,7 @@ function X.ConsiderHoofStomp()
         and not J.IsSuspiciousIllusion(botTarget)
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -181,6 +182,19 @@ function X.ConsiderHoofStomp()
             if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
             and #nInRangeAlly >= #nInRangeEnemy
             then
+                -- Anti-dive (low-HP only): Centaur is a designed
+                -- dive-tank (Stampede + return passive + Aghanim's
+                -- self-heal). Allow Hoof Stomp dives at high HP, but
+                -- block at low HP (<30%) where stomp commits him to
+                -- melee range under tower with no escape and no
+                -- immortal frame. Audit: hero_centaur.lua
+                -- ConsiderHoofStomp (RISK 2 — designed dive-tank).
+                local botHpFrac = J.GetHP(bot)
+                if botHpFrac < 0.30
+                   and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0) then
+                    return BOT_ACTION_DESIRE_NONE
+                end
                 if Stampede:IsTrained()
                 and Stampede:IsFullyCastable()
                 then
@@ -287,6 +301,7 @@ function X.ConsiderDoubleEdge()
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         and bot:GetHealth() > nDamage * 1.5
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)

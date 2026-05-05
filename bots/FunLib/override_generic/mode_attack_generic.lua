@@ -14,32 +14,34 @@ local botAttackRange, botHP, botMP, botHealth, botAttackDamage, botAttackSpeed, 
 local fLastAttackDesire = 0
 local bClearMode = false
 
+-- Diagnostic state (from main)
 local badEventCaptured = false
 local lastMidPathKey = nil
 
--- One-time load print so we can verify bot scripts are loading at all in
--- console.NNN.log. If you see [OHA-LOAD] mode_attack_generic <hero>, the
--- module loaded. If absent, the script never even got past require().
-print('[OHA-LOAD] mode_attack_generic ' .. (bot and bot:GetUnitName() or '?'))
+-- One-time load print so we can verify bot scripts are loading at all.
+-- print() is dead in current Dota build; chat is the working channel.
+pcall(function() bot:ActionImmediate_Chat('[OHA-LOAD] mode_attack_generic ' .. (bot and bot:GetUnitName() or '?'), false) end)
 
--- Diagnostic error logger. Wraps a per-tick function in pcall and prints
--- the actual error message + traceback the FIRST time it happens per
--- (mode, error). Without this, Dota squelches "error in error handling"
--- with no detail and we can't see what's actually broken.
+-- Diagnostic error logger. Wraps a per-tick function in xpcall + chat
+-- on first failure per (tag, error-prefix). The error text + Lua
+-- traceback surfaces in console.NNN.log via the FindSafe-localize
+-- chain instead of being squelched by Dota's "error in error handling".
 local _seenErrors = {}
 local function safeCall(tag, fn, ...)
 	local args = {...}
 	local ok, errOrResult = xpcall(
 		function() return fn(unpack(args)) end,
 		function(err)
-			return tostring(err) .. '\n' .. (debug and debug.traceback() or '')
+			return tostring(err) .. ' | ' .. (debug and debug.traceback() or '')
 		end
 	)
 	if ok then return errOrResult end
 	local key = tag .. '|' .. tostring(errOrResult):sub(1, 120)
 	if not _seenErrors[key] then
 		_seenErrors[key] = true
-		print('[OHA-ERR] ' .. tag .. ' bot=' .. (bot and bot:GetUnitName() or '?') .. ' err=' .. tostring(errOrResult))
+		pcall(function()
+			bot:ActionImmediate_Chat('[OHA-ERR] ' .. tag .. ' bot=' .. (bot and bot:GetUnitName() or '?') .. ' err=' .. tostring(errOrResult):sub(1, 220), false)
+		end)
 	end
 	return nil
 end
@@ -54,10 +56,27 @@ local function LogMidPath(tag, detail)
 		local key = tag .. '|' .. detail
 		if key ~= lastMidPathKey then
 			lastMidPathKey = key
-			print('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail)
+			pcall(function()
+				bot:ActionImmediate_Chat('[MID_EARLY_PATH] ' .. tag .. ' | t=' .. string.format('%.1f', DotaTime()) .. ' | bot=' .. bot:GetUnitName() .. ' | ' .. detail, false)
+			end)
 		end
 	end
 end
+
+-- Sticky-target hysteresis (from PR1). Without this, the per-tick target
+-- picker (line ~280, scores enemies by HP * dmg * ally-diff * mul) can
+-- flip between two close-scoring enemies each tick. Bot effectively
+-- oscillates because it issues Action_AttackUnit on a different unit
+-- every frame. User: "they toggle or get stuck sometimes going
+-- backwards and forwards."
+--
+-- Lock duration 1.2s (one full attack swing on most ranged heroes).
+-- Switch only when:
+--   (a) lock expired AND new pick is valid, OR
+--   (b) cached target is dead/invisible/illusion-revealed, OR
+--   (c) new pick scores >= 1.5x current pick (clear upgrade)
+local _lastAttackTarget = {}
+local ATTACK_TARGET_LOCK_SEC = 1.2
 
 local function IsValid(hUnit)
 	return hUnit ~= nil and not hUnit:IsNull() and hUnit:IsAlive()
@@ -195,12 +214,51 @@ local function _GetDesireImpl()
 			if b1 or b2 or b3 then
 				local dist = GetUnitToUnitDistance(bot, enemyHero)
 				if dist <= 2000 or ((dist / bot:GetCurrentMovementSpeed()) <= 10.0) then
-					if J.IsInLaningPhase() and bot:GetActiveMode() == BOT_MODE_ATTACK then
-						if bot:WasRecentlyDamagedByTower(2.0) or (J.IsValidBuilding(tEnemyTowers[1]) and tEnemyTowers[1]:GetAttackTarget() == bot) then
+					-- Tower-dive guard (merged: PR1 anti-dive logic + main's
+					-- diagnostic emission). Fires whenever bot is taking
+					-- tower hits OR a tower is currently auto-targeting bot
+					-- OR bot is inside tower attack range (700u).
+					--
+					-- Two skip layers:
+					--   - Hard skip: low-HP suppression. Even with an
+					--     immortal-frame buff, diving at <30% HP usually
+					--     dies after the frame ends (Satanic/BT/etc. all
+					--     have ~5s windows; tower deals ~150/swing).
+					--   - Soft skip: immortal-frame OR teamfight commit.
+					local hpFractionForDive = 0.30
+					if botHP < hpFractionForDive then
+						local divingNow = false
+						if bot:WasRecentlyDamagedByTower(2.0) then divingNow = true end
+						if J.IsValidBuilding(tEnemyTowers[1]) then
+							if tEnemyTowers[1]:GetAttackTarget() == bot then divingNow = true end
+							if GetUnitToUnitDistance(bot, tEnemyTowers[1]) < 700 then divingNow = true end
+						end
+						if divingNow then
+							LogMidPath('EngageGate', 'gate=TowerDive allow=false reason=low_hp target=' .. enemyHero:GetUnitName())
+							if not badEventCaptured and IsMidEarlyWindow() then
+								badEventCaptured = true
+								LogMidPath('BadEvent', 'id=tower_pressure_lowhp chain=ModeAttack->ConsiderEnemyHero->TowerDiveGuardLowHP->NoCommand target=' .. enemyHero:GetUnitName())
+							end
+							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
+						end
+					end
+					if not b3
+					   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+					   and not bot:HasModifier('modifier_item_satanic_unholy')
+					   and not bot:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
+					   and not bot:IsAttackImmune()
+					then
+						local divingNow = false
+						if bot:WasRecentlyDamagedByTower(2.0) then divingNow = true end
+						if J.IsValidBuilding(tEnemyTowers[1]) then
+							if tEnemyTowers[1]:GetAttackTarget() == bot then divingNow = true end
+							if GetUnitToUnitDistance(bot, tEnemyTowers[1]) < 700 then divingNow = true end
+						end
+						if divingNow then
 							LogMidPath('EngageGate', 'gate=TowerDive allow=false reason=tower_pressure target=' .. enemyHero:GetUnitName())
 							if not badEventCaptured and IsMidEarlyWindow() then
 								badEventCaptured = true
-								LogMidPath('BadEvent', 'id=tower_pressure_denial chain=ModeAttack->ConsiderEnemyHero->EngageGateTowerPressure->NoCommand target=' .. enemyHero:GetUnitName())
+								LogMidPath('BadEvent', 'id=tower_pressure_denial chain=ModeAttack->ConsiderEnemyHero->TowerDiveGuard->NoCommand target=' .. enemyHero:GetUnitName())
 							end
 							return GetActualDesire(BOT_MODE_DESIRE_VERYLOW)
 						end
@@ -333,17 +391,38 @@ local function _ThinkImpl()
 			end
 		end
 
-		-- Tower damage: retreat if significant
-		if J.IsValidBuilding(nEnemyTowers[1]) and nEnemyTowers[1]:GetAttackTarget() == bot and not bTeamFight then
-			local unitDamage = 0
-			for _, unit in pairs(GetUnitList(UNIT_LIST_ENEMIES)) do
-				if J.IsValid(unit) and unit:GetAttackTarget() == bot then
-					unitDamage = unitDamage + bot:GetActualIncomingDamage(unit:GetAttackDamage() * unit:GetAttackSpeed() * 3.0, DAMAGE_TYPE_PHYSICAL)
-				end
+		-- Tower damage: retreat if significant. Old gate required tower to
+		-- be currently targeting bot which missed the "in tower range,
+		-- about to be acquired" case. Now also retreats when bot is
+		-- within tower attack range (700u) and isn't immortal-framed.
+		if J.IsValidBuilding(nEnemyTowers[1]) and not bTeamFight
+		   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+		   and not bot:HasModifier('modifier_item_satanic_unholy')
+		   and not bot:IsAttackImmune()
+		then
+			local towerDanger = false
+			if nEnemyTowers[1]:GetAttackTarget() == bot then towerDanger = true end
+			if not towerDanger and GetUnitToUnitDistance(bot, nEnemyTowers[1]) < 700 then
+				-- Inside tower range but not yet targeted — bail before
+				-- the tower acquires us (especially on creep-aggro flicker).
+				towerDanger = true
 			end
-			if unitDamage / (botHealth + bot:GetHealthRegen() * 3.0) >= 0.2 then
-				bot:Action_MoveToLocation(J.VectorAway(botLocation, nEnemyTowers[1]:GetLocation(), 800))
-				return
+			if towerDanger then
+				local unitDamage = 0
+				for _, unit in pairs(GetUnitList(UNIT_LIST_ENEMIES)) do
+					if J.IsValid(unit) and unit:GetAttackTarget() == bot then
+						unitDamage = unitDamage + bot:GetActualIncomingDamage(unit:GetAttackDamage() * unit:GetAttackSpeed() * 3.0, DAMAGE_TYPE_PHYSICAL)
+					end
+				end
+				-- Threshold dropped to 0.15 (was 0.2) — bots were
+				-- absorbing 2 tower hits before reacting. Also fire
+				-- if just tower-aggroed, regardless of damage estimate.
+				if unitDamage / (botHealth + bot:GetHealthRegen() * 3.0) >= 0.15
+				   or nEnemyTowers[1]:GetAttackTarget() == bot
+				then
+					bot:Action_MoveToLocation(J.VectorAway(botLocation, nEnemyTowers[1]:GetLocation(), 800))
+					return
+				end
 			end
 		end
 	end
@@ -399,6 +478,34 @@ local function _ThinkImpl()
 				targetScore = enemyScore
 				__target = enemy
 			end
+		end
+	end
+
+	-- Sticky-target hysteresis. If we've recently locked a target and it's
+	-- still valid, keep it unless the new pick is a clear upgrade (>=1.5x
+	-- score). Eliminates the per-tick flicker between two close-scoring
+	-- enemies that caused the "going backwards and forwards" symptom.
+	do
+		local pid = bot:GetPlayerID()
+		local cached = _lastAttackTarget[pid]
+		local now = DotaTime()
+		local cachedValid = cached ~= nil
+			and cached.unit ~= nil and not cached.unit:IsNull() and cached.unit:IsAlive()
+			and cached.unit:CanBeSeen() and not cached.unit:IsIllusion()
+			and J.CanBeAttacked(cached.unit)
+		if cachedValid and (now - cached.lockedAt) < ATTACK_TARGET_LOCK_SEC then
+			-- Within lock window: only switch if new pick is much better.
+			if __target == nil or targetScore < cached.score * 1.5 then
+				__target = cached.unit
+				targetScore = cached.score
+			end
+		end
+		if __target ~= nil then
+			_lastAttackTarget[pid] = {
+				unit = __target,
+				score = targetScore,
+				lockedAt = (cachedValid and cached.unit == __target) and cached.lockedAt or now,
+			}
 		end
 	end
 

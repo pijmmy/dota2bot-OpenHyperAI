@@ -1,5 +1,24 @@
 local J = {}
 
+-- Circular-require defense. Without this, any module that does
+-- `local jmz = require(".../FunLib/jmz_func")` at top level WHILE BEING
+-- LOADED BY jmz_func itself (i.e. via one of the requires below) gets
+-- back Lua's circular-require sentinel (boolean `true`) instead of the
+-- J table. Per-tick `jmz.X(...)` calls then crash with "attempt to index
+-- a boolean", flooding error logs synchronously on Dota's main thread
+-- and starving input event processing — the symptom the user observed
+-- as broken mouse / mini-map / shop after commit 2f50da1.
+--
+-- By writing the J reference into package.loaded BEFORE the downstream
+-- requires fire, recursive requires of jmz_func get the partial-but-
+-- mutable J table. As jmz_func continues loading and assigns J.Func = ...,
+-- the recursively-loaded module's local jmz holds the same table identity
+-- and sees the new fields by the time runtime calls happen.
+--
+-- Standard Lua circular-require workaround. Keep this above every
+-- require() in this file.
+package.loaded[GetScriptDirectory()..'/FunLib/jmz_func'] = J
+
 local bDebugMode = ( 1 == 10 )
 local tAllyIDList = GetTeamPlayers( GetTeam() )
 local tAllyHeroList = {}
@@ -339,6 +358,90 @@ else
         MaybeRecompute = function(_) return { intent='farm', validUntil=0, reason='stub' } end,
         GetPlanBias = function(_, _, _) return 1.0 end,
         Describe = function() return 'stub' end,
+    }
+end
+
+-- Synthetic team-objective pings for bot-only teams. The ping path in
+-- aba_teamplan.lua only fires when a human is on the bot's team
+-- (J.GetHumanPing iterates GetTeamPlayers for non-bots). The enemy team
+-- in a custom lobby has no humans, so they never get the ping-driven
+-- push_lane / defend_lane intent. This module emits a synthetic ping
+-- consistent with the team's drafted strategy + game state.
+--
+-- SAFE because of the package.loaded[jmz_func] = J defense at top of file:
+-- aba_synthetic_pings.lua's top-level `local jmz = require(jmz_func)`
+-- gets the (partial) J table, not the boolean sentinel. Runtime
+-- jmz.X(...) calls resolve correctly because by then jmz_func has
+-- finished loading and J.X is populated.
+local okSP, SyntheticPingModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_synthetic_pings')
+if okSP and SyntheticPingModule then
+    J.SyntheticPing = SyntheticPingModule
+else
+    print('[WARN] aba_synthetic_pings not loaded: '..tostring(SyntheticPingModule))
+    J.SyntheticPing = { Get = function(_) return nil end, Describe = function(_) return 'stub' end }
+end
+
+-- Stun-chain coordination layer. Hero CC Considers consult this to skip
+-- casting on already-locked targets and chain at the end of existing stuns.
+local okSC, StunChainModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_stun_chain')
+if okSC and StunChainModule then
+    J.StunChain = StunChainModule
+else
+    print('[WARN] aba_stun_chain not loaded: '..tostring(StunChainModule))
+    J.StunChain = {
+        ShouldDelay = function(_) return false end,
+        ShouldChainNow = function(_, _) return false end,
+        IsTargetFreshlyLocked = function(_) return false end,
+        GetCCRemaining = function(_) return 0 end,
+        Describe = function(_) return 'stub' end,
+    }
+end
+
+-- Dewarding layer. Tracks suspected enemy ward locations and tells the
+-- ward mode when to sweep them with a sentry.
+local okDW, DewardModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_deward')
+if okDW and DewardModule then
+    J.Deward = DewardModule
+else
+    print('[WARN] aba_deward not loaded: '..tostring(DewardModule))
+    J.Deward = {
+        GetSuspectedSpots = function(_) return {} end,
+        GetReachableSuspect = function(_) return nil end,
+        IsGoodTimeToSweep = function(_) return false end,
+        MarkSwept = function(_, _) end,
+        Describe = function(_) return 'stub' end,
+    }
+end
+
+-- Hysteresis utility (sticky targets / gates / desires).
+-- See bots/FunLib/aba_hysteresis.lua for design.
+local okHy, HysteresisModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_hysteresis')
+if okHy and HysteresisModule then
+    J.Hysteresis = HysteresisModule
+else
+    print('[WARN] aba_hysteresis not loaded: '..tostring(HysteresisModule))
+    J.Hysteresis = {
+        StickyTarget = function(_, fresh, score, _, _, _) return fresh, score or 0 end,
+        ClearStickyTarget = function(_, _) end,
+        StickyGate = function(_, _, fresh, _) return fresh end,
+        StickyDesire = function(_, _, fresh, _) return fresh end,
+        ResetStickyDesire = function(_, _) end,
+        Describe = function(_, _) return 'stub' end,
+    }
+end
+
+-- Safezone utility (anti-dive predicates).
+local okSz, SafezoneModule = pcall(require, GetScriptDirectory()..'/FunLib/aba_safezone')
+if okSz and SafezoneModule then
+    J.Safezone = SafezoneModule
+else
+    print('[WARN] aba_safezone not loaded: '..tostring(SafezoneModule))
+    J.Safezone = {
+        IsLocSafeFromEnemyTowers = function(_, _) return true end,
+        WouldDiveIfMovedTo = function(_, _, _) return false end,
+        EstimateTowerDPS = function(_, _, _) return 0 end,
+        TOWER_ATTACK_RANGE = 700,
+        DEFAULT_DANGER_RADIUS = 750,
     }
 end
 
@@ -1760,9 +1863,41 @@ function J.IsInTeamFight( bot, nRadius )
 
 	if nRadius == nil or nRadius > 1600 then nRadius = 1600 end
 
+	-- Original gate: 2+ allies in BOT_MODE_ATTACK. Problem — that requires
+	-- the fight to ALREADY be in progress, so initiator ults (Magnus RP,
+	-- Tide Ravage, Enigma BH, FV Chrono, Witch Doctor Death Ward, Phoenix
+	-- Supernova, etc.) couldn't fire to START a fight. Extended to also
+	-- recognize active GANK / TEAM_ROAM / push and the team-plan intent
+	-- being commit_kill / save_ally / push_lane — those are "team is
+	-- engaging" signals that ults should respond to.
 	local attackModeAllyList = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_ATTACK )
+	if #attackModeAllyList >= 2 then return true end
 
-	return #attackModeAllyList >= 2 -- and bot:GetActiveMode() ~= BOT_MODE_RETREAT
+	-- Engaged-but-not-yet-attacking: 2+ allies in roam/gank/team_roam modes
+	-- nearby. Allows initiator ults to fire as the team commits.
+	local roamAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_TEAM_ROAM )
+	if roamAllies and #roamAllies >= 2 then return true end
+	local gankAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_GANK )
+	if gankAllies and #gankAllies >= 2 then return true end
+
+	-- Team-plan signal: if the team plan is commit_kill / save_ally with
+	-- the bot near the focus, treat as in-fight. This is the Phase-14
+	-- coordination layer talking to the per-hero ult considers.
+	local okTP, plan = pcall(function()
+		if J.TeamPlan and J.TeamPlan.GetCurrentPlan then
+			return J.TeamPlan.GetCurrentPlan()
+		end
+		return nil
+	end)
+	if okTP and plan ~= nil and plan.intent ~= nil then
+		if plan.intent == "commit_kill" or plan.intent == "save_ally" then
+			-- Need ≥1 ally within radius (so we don't ult solo)
+			local nearbyAllies = J.GetNearbyHeroes(bot, nRadius, false, BOT_MODE_NONE)
+			if nearbyAllies and #nearbyAllies >= 1 then return true end
+		end
+	end
+
+	return false
 
 end
 
@@ -1847,11 +1982,35 @@ function J.IsGoingOnSomeone( bot )
 
 	local mode = bot:GetActiveMode()
 
-	return mode == BOT_MODE_ROAM
+	-- Aggressive modes: bot is actively trying to fight someone.
+	if mode == BOT_MODE_ROAM
 		or mode == BOT_MODE_TEAM_ROAM
 		or mode == BOT_MODE_GANK
 		or mode == BOT_MODE_ATTACK
 		or mode == BOT_MODE_DEFEND_ALLY
+	then
+		return true
+	end
+
+	-- Push / defend tower modes count as "going on someone" if there's an
+	-- enemy hero in fighting range. Without this, ~545 ult-gates across the
+	-- hero library never fire during 5-man pushes or tower defenses — Doom
+	-- never ulted, Tide never ravaged, Magnus never RP'd, etc. The downstream
+	-- Consider functions still validate the actual target, so widening the
+	-- gate doesn't make heroes ult creep waves.
+	if mode == BOT_MODE_PUSH_TOWER_TOP
+		or mode == BOT_MODE_PUSH_TOWER_MID
+		or mode == BOT_MODE_PUSH_TOWER_BOT
+		or mode == BOT_MODE_DEFEND_TOWER_TOP
+		or mode == BOT_MODE_DEFEND_TOWER_MID
+		or mode == BOT_MODE_DEFEND_TOWER_BOT
+		or mode == BOT_MODE_DEFEND_ALLY
+	then
+		local nEnemies = bot:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
+		if nEnemies ~= nil and #nEnemies > 0 then return true end
+	end
+
+	return false
 
 end
 
@@ -3277,6 +3436,26 @@ function J.IsKeyWordUnit( keyWord, uUnit )
 	end
 
 	return false
+end
+
+
+-- Damage-immunity / heal-on-damage modifiers — common blacklist for
+-- single-target nuke / execute ults. Casting into any of these wastes
+-- the ult (Borrowed Time HEALS, Reaper's Scythe / Shallow Grave / False
+-- Promise / Refraction absorb, Reincarnation revives).
+--
+-- Use as: `if J.HasDamageImmunityModifier(target) then skip end`
+-- Replaces the 6-line inline list previously copy-pasted across hero
+-- files.
+function J.HasDamageImmunityModifier( target )
+	if target == nil then return false end
+	return target:HasModifier( 'modifier_abaddon_borrowed_time' )
+		or target:HasModifier( 'modifier_dazzle_shallow_grave' )
+		or target:HasModifier( 'modifier_necrolyte_reapers_scythe' )
+		or target:HasModifier( 'modifier_oracle_false_promise_timer' )
+		or target:HasModifier( 'modifier_templar_assassin_refraction_absorb' )
+		or target:HasModifier( 'modifier_skeleton_king_reincarnation_scepter_active' )
+		or target:HasModifier( 'modifier_item_aeon_disk_buff' )
 end
 
 
@@ -6330,24 +6509,34 @@ function J.GetCurrentRoshanLocation()
 
 	-- 2) Short-lived cache: trust recent sighting
 	if _lastSeenRoshanLoc ~= nil and (DotaTime() - _lastSeenRoshanTime) < _ROSHAN_SEEN_TTL then
-		-- Self-invalidation: if bots are AT the cached pit + rosh not visible,
-		-- the cache is stale (rosh has probably moved). Invalidate and fall through.
-		local ally = nil
+		-- Self-invalidation: if ANY bot is AT the cached pit + rosh not
+		-- visible (we already failed step 1), the cache is stale (rosh
+		-- has probably moved to the other pit OR was killed). Invalidate
+		-- and fall through to the alternation heuristic.
+		--
+		-- Old code only checked the FIRST alive ally's distance to the
+		-- cached pit. If pos 1 carry was alive in lane (far from pit) but
+		-- pos 4/5 were AT the pit, distance to pos 1 was huge, cache
+		-- stayed valid, supports kept being routed to wrong pit. User:
+		-- "stupid bots congregate in the wrong roshan pit."
+		--
+		-- New code uses the closest ally's distance to the cached pit —
+		-- if anyone on the team is near the cache and Rosh isn't visible,
+		-- the cache is dead.
+		local closestDist = math.huge
 		for i = 1, 5 do
 			local m = GetTeamMember(i)
-			if m ~= nil and m:IsAlive() then ally = m; break end
-		end
-		if ally ~= nil then
-			local distToCache = GetUnitToLocationDistance(ally, _lastSeenRoshanLoc)
-			if distToCache < 800 then
-				-- We're at the cached location but didn't see Rosh — bad cache
-				_lastSeenRoshanLoc = nil
-				_lastSeenRoshanTime = -999
-				-- Force alternate pit next time
-				_roshanPitAttempt = _roshanPitAttempt + 1
-			else
-				return _lastSeenRoshanLoc
+			if m ~= nil and m:IsAlive() then
+				local d = GetUnitToLocationDistance(m, _lastSeenRoshanLoc)
+				if d < closestDist then closestDist = d end
 			end
+		end
+		if closestDist < 800 then
+			-- A bot is at the cached pit but step 1 didn't surface Rosh.
+			-- Cache is dead.
+			_lastSeenRoshanLoc = nil
+			_lastSeenRoshanTime = -999
+			_roshanPitAttempt = _roshanPitAttempt + 1
 		else
 			return _lastSeenRoshanLoc
 		end

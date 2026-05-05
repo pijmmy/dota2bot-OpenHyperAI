@@ -285,9 +285,40 @@ local function computeLiveOverride()
         return "turtle_defensive", "early NW behind"
     end
 
-    -- Late game and ~even: favor teamfight_mid for coordination
+    -- Tower-state-driven escalation. Wrapped in pcall because GetTower/GetBarracks
+    -- can throw if invoked at unusual game states (early init, lobby load).
+    local towerOverride, towerReason = nil, nil
+    pcall(function()
+        local team = GetTeam()
+        local enemyTeam = GetOpposingTeam()
+        local function towersDown(t)
+            local n = 0
+            for _, tid in pairs({TOWER_TOP_1, TOWER_MID_1, TOWER_BOT_1,
+                                 TOWER_TOP_2, TOWER_MID_2, TOWER_BOT_2}) do
+                local tw = GetTower(t, tid)
+                if tw == nil or tw:IsNull() or not tw:IsAlive() then n = n + 1 end
+            end
+            return n
+        end
+        local enemyT12Down = towersDown(enemyTeam)
+        local ourT12Down = towersDown(team)
+        if nwDelta >= 6000 and enemyT12Down >= 3 and now > 18 * 60 then
+            towerOverride, towerReason = "fast_siege", "lead+enemy 3 T1/T2 down"
+        elseif nwDelta <= -6000 and ourT12Down >= 3 then
+            towerOverride, towerReason = "turtle_defensive", "behind+3 own towers down"
+        end
+    end)
+    if towerOverride then return towerOverride, towerReason end
+
+    -- Late game and ~even: switched from late_scale (which dampened pushes)
+    -- to teamfight_mid (rosh + commit_kill tempo).
     if now > 30 * 60 and math.abs(nwDelta) < 10000 then
-        return "late_scale", "late-game even"
+        return "teamfight_mid", "late-game even, teamfight tempo"
+    end
+
+    -- Very late game (45min+) with stalled NW: late_scale for buyback war.
+    if now > 45 * 60 and math.abs(nwDelta) < 5000 then
+        return "late_scale", "ultra-late stalled"
     end
 
     return nil

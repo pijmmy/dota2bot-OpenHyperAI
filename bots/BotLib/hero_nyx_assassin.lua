@@ -271,6 +271,7 @@ function X.ConsiderImpale()
         and not strongestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not strongestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(strongestTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(strongestTarget, 1200, false, BOT_MODE_NONE)
 
@@ -407,6 +408,7 @@ function X.ConsiderMindflare()
         and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not weakestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(weakestTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(weakestTarget, 800, false, BOT_MODE_NONE)
 
@@ -498,10 +500,7 @@ function X.ConsiderVendetta()
         if J.IsValidHero(enemyHero)
         and J.CanKillTarget(enemyHero, nDamage, DAMAGE_TYPE_PURE)
         and not J.IsSuspiciousIllusion(enemyHero)
-        and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-        and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-        and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
-        and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             local nInRangeAlly = J.GetNearbyHeroes(bot,800, false, BOT_MODE_NONE)
             local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 800, false, BOT_MODE_NONE)

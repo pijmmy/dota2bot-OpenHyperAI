@@ -379,6 +379,7 @@ function X.ConsiderLaser()
             and J.CanCastOnTargetAdvanced(enemyHero)
             and J.IsChasingTarget(enemyHero, bot)
             and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
+            and not J.HasDamageImmunityModifier(enemyHero)
             and (bot:WasRecentlyDamagedByHero(enemyHero, 3.5) or J.GetHP(bot) < 0.4)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
@@ -561,6 +562,7 @@ function X.ConsiderMarchOfTheMachines()
         and J.CanCastOnNonMagicImmune(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             return BOT_ACTION_DESIRE_HIGH, J.Site.GetXUnitsTowardsLocation(bot, botTarget:GetLocation(), nCastRange)
 		end
@@ -1122,6 +1124,7 @@ function X.ConsiderWarpFlare()
                 and not enemyHero:HasModifier('modifier_enigma_black_hole_pull')
                 and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     local currDmg = enemyHero:GetEstimatedDamageToTarget(true, bot, 5, DAMAGE_TYPE_ALL)
                     if currDmg > dmg
@@ -1177,6 +1180,7 @@ function X.ConsiderCombos()
             and not enemyHero:IsMagicImmune()
             and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = enemyHero:GetNearbyHeroes(1600, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = enemyHero:GetNearbyHeroes(1600, false, BOT_MODE_NONE)

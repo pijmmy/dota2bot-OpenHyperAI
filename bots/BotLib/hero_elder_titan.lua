@@ -333,6 +333,7 @@ function ConsiderEarthSplitter()
         if J.IsValidHero( botTarget )
 			and #nEnemyHeroes >= #nAllyHeroes
 			and J.CanCastOnNonMagicImmune( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 			and J.CanKillTarget( botTarget, botTarget:GetMaxHealth() * 0.4, DAMAGE_TYPE_MAGICAL )
 		then
             local loc = J.GetCorrectLoc(botTarget, crack_time)

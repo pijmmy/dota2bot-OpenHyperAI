@@ -1669,6 +1669,29 @@ X.ConsiderItemDesire["item_blink"] = function( hItem )
 				local nDistance = Min(nCastRange, GetUnitToUnitDistance(bot, botTarget))
 				local vLocation = J.GetUnitTowardDistanceLocation(bot, botTarget, nDistance) + RandomVector(150)
 				if IsLocationPassable(vLocation) then
+					-- Anti-dive on blink destination. Audit:
+					-- ability_item_usage_generic.lua:1572-1626 — combat
+					-- blink path had no enemy-tower check. Every blink-init
+					-- hero (Axe, ES, Magnus, Tiny, Treant) used this. Now
+					-- blink suppresses when destination puts bot in tower
+					-- range without immortal frame.
+					-- See bots/FunLib/aba_safezone.lua + docs/SOURCES.md.
+					if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+					   and J.Safezone.WouldDiveIfMovedTo(bot, vLocation, 0) then
+						-- Dive blocked. Try a step-back blink: same
+						-- direction but stop short of the target so we
+						-- engage from outside tower range.
+						local safeDist = nDistance - 250
+						if safeDist >= 200 then
+							local safeLoc = J.GetUnitTowardDistanceLocation(bot, botTarget, safeDist) + RandomVector(80)
+							if IsLocationPassable(safeLoc)
+							   and not J.Safezone.WouldDiveIfMovedTo(bot, safeLoc, 0) then
+								return BOT_ACTION_DESIRE_HIGH, safeLoc, 'ground', nil
+							end
+						end
+						-- Otherwise abandon the blink rather than dive.
+						return BOT_ACTION_DESIRE_NONE
+					end
 					return BOT_ACTION_DESIRE_HIGH, vLocation, 'ground', nil
 				end
 			end
@@ -2596,12 +2619,26 @@ X.ConsiderItemDesire["item_force_staff"] = function( hItem )
 			if botTarget:IsFacingLocation( allyCenterLocation, 28 )
 				and GetUnitToLocationDistance( bot, allyCenterLocation ) >= 500
 			then
-				hEffectTarget = botTarget
-				sCastMotive = '推敌人靠近自己'..J.Chat.GetNormName( hEffectTarget )
-				return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
-			end			
+				-- Anti-dive: force-staff "push enemy toward self" only
+				-- works if "self" position is safe. If bot's location
+				-- is inside enemy tower range, pulling the enemy toward
+				-- bot also pulls bot's commit-zone into tower aggro
+				-- (allies converge on bot, dive together). Skip when
+				-- bot's location is in tower range without an immortal
+				-- frame. Audit: ability_item_usage_generic.lua
+				-- item_force_staff push-toward-self (RISK 1).
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, bot:GetLocation(), 0) then
+					-- Skip: pulling enemy toward us would commit us to
+					-- a fight in tower range.
+				else
+					hEffectTarget = botTarget
+					sCastMotive = '推敌人靠近自己'..J.Chat.GetNormName( hEffectTarget )
+					return BOT_ACTION_DESIRE_HIGH, hEffectTarget, sCastType, sCastMotive
+				end
+			end
 		end
-	end	
+	end
 
 	return BOT_ACTION_DESIRE_NONE
 

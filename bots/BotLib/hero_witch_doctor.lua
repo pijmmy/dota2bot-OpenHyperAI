@@ -605,6 +605,7 @@ function X.ConsiderW()
 		and not allyHero:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
 		and not allyHero:HasModifier('modifier_oracle_false_promise_timer')
 		and not allyHero:HasModifier('modifier_item_aeon_disk_buff')
+		and not J.HasDamageImmunityModifier(allyHero)
 		then
 			if abilityW:GetToggleState() == false
 			then

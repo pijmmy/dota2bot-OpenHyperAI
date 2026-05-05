@@ -307,6 +307,7 @@ function X.ConsiderFissure()
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -456,6 +457,7 @@ function X.ConsiderEnchantTotem()
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(bot,1000, false, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(bot,800, true, BOT_MODE_NONE)
@@ -630,6 +632,7 @@ function X.ConsiderEchoSlam()
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
         and not botTarget:HasModifier('modifier_item_aeon_disk_buff')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:IsInvulnerable()
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
@@ -658,8 +661,10 @@ function X.ConsiderEchoSlam()
                     end
                 end
 
+                -- Dropped over-cautious "+2 advantage" guard (Doom pattern).
+                -- Echo Slam is at its best in 5-man pushes; the previous gate
+                -- skipped it whenever we had a 2-hero numbers lead.
                 if #nInRangeAlly >= #nInRangeEnemy
-                and not (#nInRangeAlly >= #nInRangeEnemy + 2)
                 then
                     return BOT_ACTION_DESIRE_HIGH
                 end
@@ -684,7 +689,22 @@ function X.ConsiderBlinkSlam()
 
             if nInRangeEnemy ~= nil and #nInRangeEnemy >= 2
             then
-                return BOT_ACTION_DESIRE_HIGH, J.GetCenterOfUnits(nInRangeEnemy)
+                local slamCenter = J.GetCenterOfUnits(nInRangeEnemy)
+                -- Anti-dive: blink-slam puts ES inside enemy AOE,
+                -- which is often inside enemy tower range too. ES is
+                -- not a designed dive-tank (Stout Shield only); blinking
+                -- onto a 2-man cluster under tower without an immortal
+                -- frame is a one-way commit. Suppress unless we have
+                -- an immortal frame or a 3+ enemy cluster (the bigger
+                -- the AOE payoff, the more worth the dive).
+                -- Audit: hero_earthshaker.lua ConsiderBlinkSlam (RISK 2).
+                local clusterPaysOff = (#nInRangeEnemy >= 3)
+                if not clusterPaysOff
+                   and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, slamCenter, 0) then
+                    return BOT_ACTION_DESIRE_NONE, 0
+                end
+                return BOT_ACTION_DESIRE_HIGH, slamCenter
             end
         end
     end

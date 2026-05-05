@@ -200,6 +200,13 @@ local function __TS__ArrayForEach(self, callbackFn, thisArg)
     end
 end
 -- End of Lua Library inline imports
+
+-- Per-bot stickiness for the defend-mode creep target picker. Without this,
+-- the highest-damage creep selection loop can flicker between summoned
+-- creeps (brood spiderlings, lycan wolves, etc.) with identical attack
+-- damage. 1.5s lock matches the aba_push pattern.
+local _lastDefendCreep = {}
+
 local ____exports = {}
 local getDefendState, updateDefendGameStateCache, updateDefendLocationStateCache, updateDefendUnitStateCache, _q, _keyLoc, _recentHeroCountNear, IsValidBuildingTarget, IsBaseThreatActive, WeightedEnemiesAroundLocation, GetThreatenedLane, GetClosestAllyPos, IsThereNoTeammateTravelBootsDefender, GetHighGroundEdgeWaitPoint, ConsiderPingedDefend, okLoc, Localization, PING_DELTA, MAX_DESIRE_CAP, BASE_THREAT_RADIUS, BASE_THREAT_HOLD, CACHE_ENEMY_AROUND_LOC_HZ, CACHE_LASTSEEN_WINDOW, nTeam, _threatLaneSticky, baseThreatUntil, fTraveBootsDefendTime, _cacheEnemyAroundLoc, DEFEND_CACHE_TTL, defendGameStateCache, defendLocationStateCache, defendUnitStateCache
 local jmz = require(GetScriptDirectory().."/FunLib/jmz_func")
@@ -1350,18 +1357,65 @@ function ____exports.DefendThink(bot, lane)
         end
         return
     end
+    -- Sticky hero target. Audit found that defend mode picks
+    -- enemiesAtHub[1] / nEnemyHeroes[1] each tick — the engine returns
+    -- these arrays sorted by distance, but distances flicker tick-to-tick
+    -- on movement. Two heroes at similar distances swap [1] each tick,
+    -- bot oscillates between them, never lands a hit. Use the unified
+    -- hysteresis utility (1.5s lock, switch on 1.5x score upgrade).
+    -- Score = 1/distance (closer = higher) — simple and aligned with the
+    -- engine's existing distance-sort.
+    local pid = bot:GetPlayerID()
     local enemiesAtHub = jmz.GetEnemiesNearLoc(hub, SEARCH_RANGE_DEFAULT)
+    local hubFresh, hubScore = nil, 0
     if jmz.IsValidHero(enemiesAtHub[1]) and jmz.IsInRange(bot, enemiesAtHub[1], nSearchRange) then
-        bot:Action_AttackUnit(enemiesAtHub[1], true)
+        hubFresh = enemiesAtHub[1]
+        hubScore = 1.0 / math.max(1, GetUnitToUnitDistance(bot, hubFresh))
+    end
+    if jmz.Hysteresis and jmz.Hysteresis.StickyTarget and hubFresh ~= nil then
+        local hubPick = jmz.Hysteresis.StickyTarget(pid, hubFresh, hubScore, 1.5, 1.5, "defend_hub")
+        if hubPick ~= nil and jmz.IsInRange(bot, hubPick, nSearchRange) then
+            bot:Action_AttackUnit(hubPick, true)
+            return
+        end
+    elseif hubFresh ~= nil then
+        bot:Action_AttackUnit(hubFresh, true)
         return
     end
     local nEnemyHeroes = bot:GetNearbyHeroes(SEARCH_RANGE_DEFAULT, true, BotMode.None)
+    local nbyFresh, nbyScore = nil, 0
     if jmz.IsValidHero(nEnemyHeroes[1]) and jmz.IsInRange(bot, nEnemyHeroes[1], nSearchRange) then
-        bot:Action_AttackUnit(nEnemyHeroes[1], true)
+        nbyFresh = nEnemyHeroes[1]
+        nbyScore = 1.0 / math.max(1, GetUnitToUnitDistance(bot, nbyFresh))
+    end
+    if jmz.Hysteresis and jmz.Hysteresis.StickyTarget and nbyFresh ~= nil then
+        local nbyPick = jmz.Hysteresis.StickyTarget(pid, nbyFresh, nbyScore, 1.5, 1.5, "defend_nby")
+        if nbyPick ~= nil and jmz.IsInRange(bot, nbyPick, nSearchRange) then
+            bot:Action_AttackUnit(nbyPick, true)
+            return
+        end
+    elseif nbyFresh ~= nil then
+        bot:Action_AttackUnit(nbyFresh, true)
         return
     end
     local creeps = bot:GetNearbyCreeps(900, true)
     if creeps and #creeps > 0 and (not enemiesAtHub or #enemiesAtHub == 0) then
+        -- Stickiness: same pattern as aba_push.lua. Without this, the
+        -- highest-damage creep selection loop below can flicker between
+        -- multiple summoned creeps with identical attack damage (brood
+        -- spiderlings, lycan wolves, etc.). The reported "Doom dithers
+        -- at broodmother spiders, can't kill any of them" symptom in
+        -- the DEFEND_TOWER mode path. 1.5s lock keeps the bot committed.
+        local pid = bot:GetPlayerID()
+        local cached = _lastDefendCreep[pid]
+        local now = DotaTime()
+        if cached ~= nil and cached.expires > now then
+            local u = cached.unit
+            if jmz.IsValid(u) and jmz.CanBeAttacked(u) and jmz.IsInRange(bot, u, 900) then
+                bot:Action_AttackUnit(u, true)
+                return
+            end
+        end
         local best = nil
         local bestDmg = -1
         for ____, c in ipairs(creeps) do
@@ -1375,6 +1429,7 @@ function ____exports.DefendThink(bot, lane)
         end
         if best then
             bot:Action_AttackUnit(best, true)
+            _lastDefendCreep[pid] = { unit = best, expires = now + 1.5 }
             return
         end
     end

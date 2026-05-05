@@ -261,6 +261,7 @@ function X.ConsiderAvalanche()
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 		and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -387,6 +388,7 @@ function X.ConsiderToss()
 			and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
 			and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
 			and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				return BOT_ACTION_DESIRE_HIGH, enemyHero
 			end
@@ -606,6 +608,7 @@ function X.ConsiderTreeThrow()
 		and not weakestTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not weakestTarget:HasModifier('modifier_oracle_false_promise_timer')
 		and not weakestTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(weakestTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH, weakestTarget
 		end
@@ -676,6 +679,7 @@ function X.ConsiderTreeVolley()
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
 		and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
 		and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 		and #nInRangeAlly >= #nInRangeEnemy
 		and GetUnitToUnitDistance(bot, botTarget) >= 500
@@ -717,6 +721,16 @@ function X.ConsiderBlinkToss()
 				if J.IsInRange(bot, botTarget, nCastRange)
 				and GetUnitToUnitDistance(bot, botTarget) > nRadius
 				then
+					-- Anti-dive: blink-toss puts Tiny adjacent to target
+					-- (toss requires <=275u). If target is under enemy
+					-- tower, Tiny lands in tower range with no immortal
+					-- frame by default. Suppress unless we have an
+					-- immortal frame OR HP buffer to absorb. Audit:
+					-- hero_tiny.lua ConsiderBlinkToss (RISK 2).
+					if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+					   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0) then
+						return BOT_ACTION_DESIRE_NONE, 0
+					end
 					BlinkLocation = botTarget:GetLocation()
 					return BOT_ACTION_DESIRE_HIGH, nInRangeAlly[#nInRangeAlly]
 				end

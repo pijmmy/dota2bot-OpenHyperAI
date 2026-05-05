@@ -352,6 +352,7 @@ function X.ConsiderDisruption()
                 and not allyHero:HasModifier('modifier_abaddon_borrowed_time')
                 and not allyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not allyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(allyHero)
                 and not allyHero:HasModifier('modifier_obsidian_destroyer_astral_imprisonment_prison')
                 then
                     return BOT_ACTION_DESIRE_HIGH, allyHero
@@ -397,6 +398,7 @@ function X.ConsiderDisseminate()
         and J.IsInRange(bot, botTarget, nCastRange)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
 			if J.GetAroundTargetEnemyUnitCount(botTarget, nRadius) >= 3
             then
@@ -496,6 +498,7 @@ function X.ConsiderShadowPoison()
         and not strongestTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not strongestTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(strongestTarget)
         and J.GetMP(bot) > 0.65
 		then
             if J.IsInRange(bot, strongestTarget, (nCastRange / 2) - 150)
@@ -595,6 +598,7 @@ function X.ConsiderDemonicPurge()
         and not strongestTarget:HasModifier('modifier_enigma_black_hole_pull')
         and not strongestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(strongestTarget)
 		then
             return BOT_ACTION_DESIRE_HIGH, strongestTarget
 		end
@@ -653,6 +657,7 @@ function X.ConsiderDemonicCleanse()
             and not allyHero:HasModifier('modifier_enigma_black_hole_pull')
             and not allyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(allyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
             end

@@ -106,7 +106,7 @@ Customize.Force_Group_Push_Level = 1
 Customize.Fretbots = {
     -- Default difficulty, a number between: [0, 10]
     -- 2 is mild; 6 is solid challenge; 7 punishing; 8+ is crushing.
-    Default_Difficulty = 7,
+    Default_Difficulty = 8,
 
     -- Default ally bots bonus scale comparing to enemy bots, a number between: [0, 1]
     Default_Ally_Scale = 0.5,

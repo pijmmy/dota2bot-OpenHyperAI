@@ -26,6 +26,12 @@ const BASE_THREAT_RADIUS = 2600;
 const BASE_LEASH_OUTBOUND = 1200;
 const BASE_THREAT_HOLD = 4.0;
 
+// Per-bot stickiness for the defend-mode creep target picker. Without this,
+// the highest-damage creep selection loop can flicker between summoned
+// creeps (brood spiderlings, lycan wolves) with identical attack damage.
+// 1.5s lock matches the aba_push pattern.
+const _lastDefendCreep: Record<number, { unit: Unit; expires: number }> = {};
+
 // Perf: cache intervals (seconds)
 const CACHE_ENEMY_AROUND_LOC_HZ = 0.35; // cache for weighted enemy scans around a location
 const CACHE_LASTSEEN_WINDOW = 5.0; // seconds for hero last-seen proximity checks
@@ -1022,6 +1028,19 @@ export function DefendThink(bot: Unit, lane: Lane) {
     // Otherwise, clear strongest creep (avoid full scans)
     const creeps = bot.GetNearbyCreeps(900, true);
     if (creeps && creeps.length > 0 && (!enemiesAtHub || enemiesAtHub.length === 0)) {
+        // Stickiness: prevent flicker between summoned creeps with identical
+        // attack damage (brood spiderlings, lycan wolves) — same pattern as
+        // aba_push. Reported as "Doom dithers at brood spiders, can't kill any."
+        const pid = bot.GetPlayerID();
+        const cached = _lastDefendCreep[pid];
+        const now = DotaTime();
+        if (cached && cached.expires > now) {
+            const u = cached.unit;
+            if (jmz.IsValid(u) && jmz.CanBeAttacked(u) && jmz.IsInRange(bot, u, 900)) {
+                bot.Action_AttackUnit(u, true);
+                return;
+            }
+        }
         let best: Unit | null = null;
         let bestDmg = -1;
         for (const c of creeps) {
@@ -1035,6 +1054,7 @@ export function DefendThink(bot: Unit, lane: Lane) {
         }
         if (best) {
             bot.Action_AttackUnit(best, true);
+            _lastDefendCreep[pid] = { unit: best, expires: now + 1.5 };
             return;
         }
     }

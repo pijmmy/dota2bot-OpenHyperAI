@@ -291,6 +291,7 @@ function X.ConsiderVenomousGale()
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = botTarget:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = botTarget:GetNearbyHeroes(1200, false, BOT_MODE_NONE)
@@ -430,6 +431,7 @@ function X.ConsiderPlagueWard()
         and J.IsInRange(bot, botTarget, nCastRange)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             if nStacks < 8 then
                 return BOT_ACTION_DESIRE_HIGH, bot, true
@@ -564,16 +566,17 @@ function X.ConsiderNoxiousPlague()
             and not J.IsDisabled(enemyHero)
             and not enemyHero:HasModifier('modifier_enigma_black_hole_pull')
             and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
-            and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_venomancer_latent_poison')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = enemyHero:GetNearbyHeroes(1200, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = enemyHero:GetNearbyHeroes(1200, false, BOT_MODE_NONE)
                 local currDmg = enemyHero:GetEstimatedDamageToTarget(true, bot, 5, DAMAGE_TYPE_ALL)
 
+                -- Removed `not (#nInRangeAlly >= #nTargetInRangeAlly + 2)` —
+                -- same Doom-class +2 over-cautious gate.
                 if nInRangeAlly ~= nil and nTargetInRangeAlly ~= nil
                 and #nInRangeAlly >= #nTargetInRangeAlly
-                and not (#nInRangeAlly >= #nTargetInRangeAlly + 2)
                 and dmg < currDmg
                 then
                     dmg = currDmg

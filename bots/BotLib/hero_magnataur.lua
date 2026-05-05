@@ -315,6 +315,7 @@ function X.ConsiderShockwave()
         and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
         and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
         and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(enemyHero)
         then
             local nDelay = (GetUnitToUnitDistance(bot, enemyHero) / nSpeed) + nCastPoint
             return BOT_ACTION_DESIRE_HIGH, enemyHero:GetExtrapolatedLocation(nDelay)
@@ -489,6 +490,7 @@ function X.ConsiderEmpower()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy
         and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -674,6 +676,7 @@ function X.ConsiderReversePolarity()
                 and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
                 and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
                 and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     return BOT_ACTION_DESIRE_HIGH
                 end
@@ -760,6 +763,20 @@ function X.ConsiderBlinkRP()
                 and not J.IsLocationInChrono(nLocationAoE.targetloc)
                 and not J.IsLocationInBlackHole(nLocationAoE.targetloc)
                 then
+                    -- Anti-dive: BlinkRP commits Magnus to the AOE
+                    -- center, often inside enemy tower range when the
+                    -- teamfight clusters near a tower. Magnus has no
+                    -- immortal frame by default (sometimes Satanic late);
+                    -- post-RP he's vulnerable until Skewer follow-up.
+                    -- Allow when 3+ enemies in cluster (dive payoff
+                    -- justifies the risk) OR not actually diving.
+                    -- Audit: hero_magnataur.lua ConsiderBlinkRP (RISK 2).
+                    local clusterPaysOff = (#realEnemyCount >= 3)
+                    if not clusterPaysOff
+                       and J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                       and J.Safezone.WouldDiveIfMovedTo(bot, nLocationAoE.targetloc, 0) then
+                        return BOT_ACTION_DESIRE_NONE
+                    end
                     BlinkLocation = nLocationAoE.targetloc
                     return BOT_ACTION_DESIRE_HIGH
                 end

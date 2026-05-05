@@ -328,6 +328,7 @@ function X.ConsiderWildAxes()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 1000, false, BOT_MODE_NONE)
 
@@ -591,6 +592,7 @@ function X.ConsiderCallOfTheWildHawk()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 800, false, BOT_MODE_NONE)
 
@@ -677,10 +679,7 @@ function X.ConsiderPrimalRoar()
             and bot:IsFacingLocation(enemyHero:GetLocation(), 30)
             and not enemyHero:IsFacingLocation(bot:GetLocation(), 30)
             and not WildAxes:IsFullyCastable()
-            and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
-            and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
-            and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
-            and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 return BOT_ACTION_DESIRE_HIGH, enemyHero
             end
@@ -831,6 +830,7 @@ function X.ConsiderBlinkRoar()
             and not strongestTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
             and not strongestTarget:HasModifier('modifier_legion_commander_duel')
             and not strongestTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(strongestTarget)
             then
                 local nTargetInRangeAlly = J.GetNearbyHeroes(strongestTarget, 1200, false, BOT_MODE_NONE)
 

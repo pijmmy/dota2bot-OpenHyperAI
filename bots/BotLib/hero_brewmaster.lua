@@ -245,6 +245,7 @@ function X.ConsiderThunderClap()
         and not J.IsDisabled(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             return BOT_ACTION_DESIRE_HIGH
 		end
@@ -400,6 +401,7 @@ function X.ConsiderCinderBrew()
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_brewmaster_cinder_brew')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetLoc = botTarget:GetLocation()
             if not J.IsInRange(bot, botTarget, nCastRange)
@@ -553,6 +555,7 @@ function X.ConsiderLiquidCourage()
         and not allyHero:IsIllusion()
         and not allyHero:IsChanneling()
         and not allyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(allyHero)
         and not J.IsAttacking(allyHero)
         and J.IsRunning(allyHero)
         and allyHero:WasRecentlyDamagedByAnyHero(2.0)
@@ -602,6 +605,7 @@ function X.ConsiderPrimalCompanion()
         and not J.IsDisabled(botTarget)
         and not J.IsMeepoClone(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not J.IsLocationInChrono(botTarget:GetLocation())
 		then
             return BOT_ACTION_DESIRE_HIGH
@@ -650,6 +654,7 @@ function X.ConsiderPrimalSplit()
         and not J.IsDisabled(botTarget)
         and not J.IsMeepoClone(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not J.IsLocationInChrono(botTarget:GetLocation())
 		then
             if nAllyHeroes ~= nil and nEnemyHeroes ~= nil

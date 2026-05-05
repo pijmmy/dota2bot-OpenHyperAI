@@ -236,6 +236,7 @@ function X.ConsiderIceShards()
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
         and not botTarget:HasModifier('modifier_legion_commander_duel')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -354,6 +355,7 @@ function X.ConsiderDrinkingBuddies()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local bBotChasing = J.IsChasingTarget(bot, botTarget)
             local bAllyChasing = J.IsChasingTarget(hTarget, botTarget)
@@ -501,6 +503,7 @@ function X.ConsiderSnowball()
                 and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
                 and not enemyHero:HasModifier('modifier_legion_commander_duel')
                 and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+                and not J.HasDamageImmunityModifier(enemyHero)
                 then
                     bot.snowballHeroRetreat = true
                     return BOT_ACTION_DESIRE_HIGH, enemyHero
@@ -572,6 +575,7 @@ function X.ConsiderTagTeam()
         and not botTarget:HasModifier('modifier_legion_commander_duel')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_templar_assassin_refraction_absorb')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -639,6 +643,7 @@ function X.ConsiderWalrusPunch()
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_templar_assassin_refraction_absorb')
+            and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				local currDmg = enemyHero:GetEstimatedDamageToTarget(false, bot, 4, DAMAGE_TYPE_ALL)
 				if currDmg > dmg

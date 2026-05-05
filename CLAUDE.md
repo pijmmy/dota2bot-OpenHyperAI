@@ -11,6 +11,158 @@ This is the **dota2bot-OpenHyperAI** project -- Lua bot scripts for Dota 2 that 
 
 **Read these docs FIRST before making any changes.** They contain everything needed to make targeted updates without scanning the entire repo.
 
+## Engineering discipline (read every session — non-negotiable)
+
+Bot bugs in this codebase are almost never "syntax wrong." They are
+"the desire / intent / target / threat-count calculation flips between
+ticks because two inputs disagree, or one gate is too strict, or one
+counter includes things it shouldn't." That means **shipping a code
+change is not a fix**. A fix is when you have traced the specific
+scenario through the actual code path and confirmed which gate now
+fires (or doesn't) that didn't before.
+
+### Hard rules
+
+1. **Do not lead with "Sim 64/64 green" when the user reported a
+   behavior bug.** The sim suite (`python -m sim.run_sim` in the
+   guineapig repo) tests structural properties — function existence,
+   intent priorities, multiplier-envelope clamps. It does **not** test
+   whether Doom ults, whether bots respond to pings, whether bots
+   dither at brood spiders, or whether Tide ravages. Sim green +
+   behavior bug present = sim is silent on the bug. Saying "sim green,
+   ready to test" misleads the user into thinking the problem is solved.
+
+2. **Trace before shipping.** Before every fix to a hero / mode /
+   teamplan file, mentally run a concrete scenario through the code:
+   *"Bot X is in mode Y at minute Z, sees enemy A at distance D with
+   HP H — walk through each gate."* Identify the specific line that
+   fired/failed and put the trace in the commit message. If you can't
+   trace it, you don't yet understand the bug — keep reading.
+
+3. **Audit the bug class, not just the named instance.** When fixing
+   pattern X in file Y (e.g. the `+2 advantage` gate in Doom's
+   `ConsiderDoom`), grep the rest of `bots/BotLib/` for the same
+   pattern and report findings in the same session. The user is
+   almost always reporting one instance of a recurring pattern.
+
+4. **No "go" loops.** Don't ship a small change, claim it works, ask
+   the user to test, repeat. The user is paying for engineering, not
+   chat. If the work is days, say "days" upfront and structure as
+   audit → trace → verified-fix-batch → ship — not patch → patch →
+   patch with "going" between each.
+
+5. **Verify or admit.** For each shipped fix, in the commit message,
+   declare: (a) what code path was traced, (b) under what scenario,
+   (c) what specific change in behavior is now expected. If you didn't
+   verify by tracing, say so explicitly: *"shipped on framework
+   reasoning only, not traced through a concrete scenario."* Don't
+   pretend.
+
+6. **Dithering is always a bug.** Any time bots toggle behavior between
+   ticks (target flip, attack-then-retreat-then-attack, two-anchor
+   oscillation), the root cause is per-tick decision recomputation
+   without hysteresis, OR a counter/threshold that includes things it
+   shouldn't (summons treated as enemies, illusions counted as heroes,
+   stale visibility data). Don't tune around it; find the input that
+   keeps changing.
+
+### Anti-patterns that have caused regressions in this project
+
+- **"Framework fix should help X downstream callers."** Every
+  downstream caller has its own gates. Broadening `IsGoingOnSomeone`
+  doesn't make Tide ravage if Tide's `ConsiderRavage` has its own
+  bugs. If you didn't read the downstream callers, the fix is unverified.
+- **Multipliers stacked into ModulateDesire without tracing the chain.**
+  Phase 11 shipped 9 modules into `J.Personality.ModulateDesire` this
+  way; several actively hurt gameplay because no one walked through the
+  ~8 stacking factors per call to see how they interacted.
+- **"Sim 64/64 green"** quoted as evidence the user's bug is fixed.
+  See rule 1.
+- **Pattern-matching** (*"this looks like it might be the issue"*)
+  without tracing the gate-by-gate flow. Almost always produces
+  half-fixes that the user discovers in lobby and reports back.
+
+### Vocabulary
+
+- **Drop "fair", "right", "good question", "got it", "alright" and
+  other agreeable-teenager openers.** Open with the substance.
+- Don't say *"going, this is hours"* and then ship incremental patches
+  across multiple sessions. That math doesn't add up to fixed.
+- When the work is genuinely days, say *"this is days of work, here is
+  what days one and two look like"* — not *"hours."*
+
+### Banned phrases (mechanically enforced via Stop hook)
+
+The following are blocked in stop-time replies. They look like honest
+disclosure but they're sandbag phrases that signal chat-loop drift. The
+Stop hook (`.claude/hooks/check_stop_sandbag.sh`) will reject the reply
+and force a rewrite if any appear:
+
+**Original ban list (item-5 audit):**
+
+- "still not done" / "haven't audited" / "haven't verified" / "haven't fixed"
+- "needs lobby test" / "needs lobby verification" / "needs lobby observation"
+- "want me to keep going" / "should I continue/proceed/keep going"
+- "ready to test" / "ready to play" / "ready to push" / "ready to merge"
+- "boot a lobby" / "test in a lobby" / "test it now" / "test and tell me"
+- "sim 64/64 green" / "all checks pass" / "all tests pass" (when leading
+  with this on a behavior-bug report)
+- Opening with "fair", "right", "got it", "alright", "ok", "gotcha"
+- "let me commit" / "committing now" / "pushed [state of...]" mid-task
+
+**Expanded ban list (item-5 of trust audit added these):**
+
+- "Final state of..." / "Cumulative coverage" / "Coverage so far"
+  — these are status-report scaffolding even when the user wanted just
+  the result.
+- "What this commit does" / "What this batch does" / "What this fix does"
+  — narrating the past instead of stating the result.
+- "What I've done" / "What I did" / "What was verified" lists
+- Section headers in stop-replies: `^Conclusion`, `^Summary`, `^Findings`,
+  `^Method` — replies aren't reports, they're answers.
+- "Heroes deliberately not updated" / "Heroes specifically excluded"
+  — past-tense lists of the boundaries of what I did.
+- "Now let me..." / "Next I'll..." / "Going through..." — process
+  narration that signals incomplete work pretending to be an update.
+- "Per-hero coverage" / "Per-hero breakdown" tables in replies.
+
+The pattern: any reply that reads like a status report SHOULD be a
+result instead. Either: "Done. <result>" or just keep working silently.
+
+The override is to actually finish the work. The hook is not gameable.
+
+### Finished-state contract (mechanically enforced via PreToolUse hooks)
+
+**Every commit must include a `## Trace` or `Trace:` section** describing
+the concrete scenario walked through the code, what gate fires/doesn't,
+and what changes behaviorally. The commit-trace hook
+(`.claude/hooks/check_commit_trace.sh`) blocks commits without it.
+Exception: `chore:` / `docs:` / `trivial:` / `typo:` prefixes for
+non-code changes.
+
+**Every `git push` requires the `.work-complete` marker file.** The
+push-gate hook (`.claude/hooks/check_push_marker.sh`) blocks pushes when
+the marker is absent. The marker is auto-deleted on successful push, so
+each batch must explicitly re-create it.
+
+The workflow is:
+  1. User defines a batch of work.
+  2. Do all of it. No mid-batch commits-and-pushes for "checkpoints."
+  3. When done, write a one-line summary to `.work-complete`.
+  4. Push.
+
+If you're tempted to push partial work — stop. Keep doing the work.
+
+### Frustration response (mechanically enforced via UserPromptSubmit hook)
+
+When the user uses frustration markers ("FINISH", "lazy", "do better",
+"shitty", "FFS", etc.), the UserPromptSubmit hook
+(`.claude/hooks/inject_discipline_on_frustration.sh`) injects this
+discipline reminder into context before your prompt. You don't need
+to remember it manually — it auto-injects. But knowing it auto-injects
+means: when the user is angry, the discipline rules are already
+re-loaded, so you have NO excuse to drift.
+
 ## Common Tasks
 
 ### Check for New Patches

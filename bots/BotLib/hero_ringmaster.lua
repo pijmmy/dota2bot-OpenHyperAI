@@ -295,6 +295,7 @@ function X.ConsiderTameTheBeasts()
             and not enemy:HasModifier('modifier_dazzle_shallow_grave')
             and not enemy:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemy:HasModifier('modifier_oracle_false_promise_timer')
+            and not J.HasDamageImmunityModifier(enemy)
             then
                 bot.whip_to_kill = true
                 bot.whip_to_kill_target = enemy
@@ -644,6 +645,7 @@ function X.ConsiderEscapeAct()
                 and not ally:HasModifier('modifier_abaddon_borrowed_time')
                 and not ally:HasModifier('modifier_dazzle_shallow_grave')
                 and not ally:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(ally)
                 and not ally:HasModifier('modifier_obsidian_destroyer_astral_imprisonment_prison')
                 then
                     return BOT_ACTION_DESIRE_HIGH, ally
@@ -693,6 +695,7 @@ function X.ConsiderImpalementArts()
             and not enemy:HasModifier('modifier_abaddon_borrowed_time')
             and not enemy:HasModifier('modifier_dazzle_shallow_grave')
             and not enemy:HasModifier('modifier_oracle_false_promise_timer')
+            and not J.HasDamageImmunityModifier(enemy)
             then
                 if J.CanKillTarget(enemy, nImpactDamage, DAMAGE_TYPE_MAGICAL)
                 or J.CanKillTarget(enemy, nImpactDamage + enemy:GetMaxHealth() * nBleedPct * nDuration, DAMAGE_TYPE_MAGICAL)
@@ -820,6 +823,7 @@ function X.ConsiderSpotlight()
         and not ally:IsIllusion()
         and J.CanBeAttacked(ally)
         and not ally:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(ally)
         then
             if ally:HasModifier('modifier_legion_commander_duel')
             or ally:HasModifier('modifier_enigma_black_hole_pull')
@@ -986,6 +990,7 @@ function X.ConsiderStrongmanTonic()
                 and not ally:HasModifier('modifier_abaddon_borrowed_time')
                 and not ally:HasModifier('modifier_dazzle_shallow_grave')
                 and not ally:HasModifier('modifier_templar_assassin_refraction_absorb')
+                and not J.HasDamageImmunityModifier(ally)
                 and not ally:HasModifier('modifier_obsidian_destroyer_astral_imprisonment_prison')
                 then
                     return BOT_ACTION_DESIRE_HIGH, ally

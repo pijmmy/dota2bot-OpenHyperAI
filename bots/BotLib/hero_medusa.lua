@@ -285,6 +285,7 @@ function X.ConsiderGorgonGrasp()
 			and not enemyHero:HasModifier('modifier_enigma_black_hole_pull')
 			and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				return BOT_ACTION_DESIRE_HIGH, (bot:GetLocation() + enemyHero:GetLocation()) / 2
 			end

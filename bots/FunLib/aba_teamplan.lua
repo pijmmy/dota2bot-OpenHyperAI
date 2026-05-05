@@ -149,10 +149,13 @@ local function isTormentorContestable(bot, team)
 end
 
 local function isLotusContestable(team, now)
-    -- Lotus pools refresh every ~3 min after pickup. Without a direct API,
-    -- we bias toward contesting during laning + early mid-game when lotuses
-    -- matter most (sustain for the safelane / offlane).
-    if now < 60 or now > 14 * 60 then return false, nil end
+    -- Lotus pools refresh every ~3 min after pickup. Worth pickup as long as
+    -- the ruins are still our side of the map. Old window cut off at 14min,
+    -- which left supports walking past lotuses they should be grabbing all
+    -- the way through mid-game. Extended to 25min — by then the team should
+    -- be on rosh / push and the small sustain doesn't justify a rotation.
+    -- contest_lotus is role-gated to {4,5} so cores aren't pulled off.
+    if now < 60 or now > 25 * 60 then return false, nil end
     -- Score our nearest lotus location — prefer the one closer to the team center.
     local J = jmz()
     local teamFountain = J.GetTeamFountain and J.GetTeamFountain() or nil
@@ -223,7 +226,34 @@ local function getLaneTier(team, lane)
     return 4
 end
 
+-- Returns count of enemy heroes last seen within `radius` of `loc` in the
+-- last 5 seconds. Catches enemies that just dropped vision (smoke / behind
+-- creep wave / fog of war) — exactly the HG-push pattern.
+local function countLastSeenEnemyHeroesNear(loc, radius)
+    local J = jmz()
+    local ok, list = pcall(function() return J.GetLastSeenEnemiesNearLoc(loc, radius) end)
+    if not ok or list == nil then return 0 end
+    return #list
+end
+
 local function findThreatenedLane(team)
+    -- Tier-aware threat detection.
+    --
+    -- Old gate: threat = visibleEnemies + (HP<90% ? 1 : 0). Required
+    -- threat >= 2 across ALL tiers. For high-ground (T3/rax) this missed
+    -- the common scenario: enemies push in fog with creeps, building
+    -- chips down, no enemy heroes visible to bots, threat < 2, defend
+    -- never fires. User: "bots dont defend high ground."
+    --
+    -- v2 added tier-awareness but still relied on visible-only enemies
+    -- (countEnemyHeroesNear) and hero-only damage (WasRecentlyDamagedByAnyHero).
+    -- HG sieges typically start with creeps eating tower while heroes
+    -- stay in fog. Both signals miss this. After lobby observation:
+    -- "bots dont defend high ground" — same complaint.
+    --
+    -- v3 (this version): for HG (tier >= 3), use last-seen enemies (5s
+    -- window) AND check WasRecentlyDamagedByCreep. Now creep-only
+    -- damage to T3/rax with all heroes in fog still triggers defense.
     local lanes = { LANE_TOP, LANE_MID, LANE_BOT }
     local bestLane = nil
     local bestLoc = nil
@@ -233,10 +263,53 @@ local function findThreatenedLane(team)
         local building = findFurthestAliveLaneBuilding(team, lane)
         if building ~= nil then
             local loc = building:GetLocation()
-            local enemiesNear = countEnemyHeroesNear(loc, 1600)
-            local recentlyHit = building:GetHealth() < building:GetMaxHealth() * 0.9
-            local threat = enemiesNear + (recentlyHit and 1 or 0)
-            if threat >= 2 and threat > bestThreat then
+            local visibleEnemies = countEnemyHeroesNear(loc, 1600)
+            local hpPct = building:GetHealth() / math.max(1, building:GetMaxHealth())
+            local recentlyHit = hpPct < 0.9
+
+            -- Hero damage signal (live, doesn't require current vision).
+            local okHeroDmg, heroDmg = pcall(function()
+                return building:WasRecentlyDamagedByAnyHero(5.0)
+            end)
+            local heroDamageRecent = (okHeroDmg and heroDmg) or false
+
+            -- Creep damage signal — critical for HG sieges.
+            local okCreepDmg, creepDmg = pcall(function()
+                return building:WasRecentlyDamagedByCreep(5.0)
+            end)
+            local creepDamageRecent = (okCreepDmg and creepDmg) or false
+
+            local damagedRecently = heroDamageRecent or creepDamageRecent
+            local tier = getLaneTier(team, lane)
+
+            local threat = visibleEnemies + (recentlyHit and 1 or 0)
+            local fires = false
+            if tier <= 2 then
+                -- T1 / T2: keep the conservative gate — avoid
+                -- over-defending early when one scout roams our lane.
+                fires = (threat >= 2)
+            elseif tier == 3 then
+                -- HG: visible enemies OR last-seen enemies (fog tolerance)
+                -- OR active damage (hero or creep). Wide net intentional —
+                -- T3 falling because we missed a fog push is the user's
+                -- exact complaint.
+                local lastSeenEnemies = countLastSeenEnemyHeroesNear(loc, 1800)
+                fires = (visibleEnemies >= 1) or (lastSeenEnemies >= 1) or damagedRecently
+                if fires then
+                    -- Boost threat so HG defends beat T1/T2 chip on a
+                    -- different lane.
+                    threat = math.max(threat, 3)
+                end
+            else
+                -- Rax tier (T3 down): ANY damage = full alarm. Vision
+                -- gating is wrong here; rax dies to creeps + heroes in fog.
+                fires = damagedRecently or (visibleEnemies >= 1)
+                if fires then
+                    threat = math.max(threat, 4)
+                end
+            end
+
+            if fires and threat > bestThreat then
                 bestThreat = threat
                 bestLane = lane
                 bestLoc = loc
@@ -456,6 +529,60 @@ local function trackIntent(intent)
 end
 
 -- ============================================================
+-- Plan commitment.
+--
+-- commitment ∈ [0, 1] tells GetPlanBias how authoritatively to enforce
+-- the plan. Low commitment = advisory (bots can ignore via their own
+-- desires + teamSpirit dampener — current behavior). High commitment
+-- = the bias range widens beyond the [0.5, 1.3] envelope AND drops the
+-- teamSpirit dampener, so contradicting modes get hammered to ~0.2x and
+-- aligned modes get pushed to ~1.6x. That makes high-stakes plans
+-- (defend_base, push during a winning state, save_ally) actually
+-- coordinate the team instead of being one factor among many.
+--
+-- Push-then-retreat fix: push_lane commitment grows with age. After 25s
+-- in push, commitment is high enough that the missing-enemy regroup
+-- intent at line ~846 can't actually pull bots off the push — their
+-- push mode dominates regardless.
+-- ============================================================
+
+local INTENT_BASE_COMMITMENT = {
+    defend_base       = 1.00,
+    save_ally         = 0.95,
+    commit_kill       = 0.85,
+    contest_rosh      = 0.85,
+    contest_tormentor = 0.80,
+    smoke_gank        = 0.65,
+    push_lane         = 0.50,   -- starts advisory; ramps via age boost below
+    defend_lane       = 0.75,
+    lane_gank         = 0.65,
+    contest_lotus     = 0.40,
+    late_game_group   = 0.55,
+    regroup           = 0.45,
+    farm              = 0.30,   -- always advisory
+}
+
+-- Sticky intents: longer time spent in this intent → stronger commitment.
+-- Stops the team flipping plans every 2s during a coordinated maneuver.
+local STICKY_INTENTS = {
+    push_lane = true, contest_rosh = true, smoke_gank = true,
+    late_game_group = true, commit_kill = true, defend_lane = true,
+}
+
+local function computeCommitment(intent, planAgeSec)
+    local base = INTENT_BASE_COMMITMENT[intent] or 0.50
+    if STICKY_INTENTS[intent] then
+        local age = planAgeSec or 0
+        if age < 0 then age = 0 end
+        if age > 30 then age = 30 end
+        base = base + (age / 30) * 0.25   -- up to +0.25 after 30s
+    end
+    if base < 0 then return 0 end
+    if base > 1 then return 1 end
+    return base
+end
+
+-- ============================================================
 -- Intent computation
 -- ============================================================
 
@@ -517,21 +644,59 @@ end
 -- Opening flavor: rolled once per match to vary early-game strategy.
 -- Stored at module scope so every computePlan call sees the same roll.
 local _openingFlavor = nil
+local _midgameFlavor = nil
+local _lateGameFlavor = nil
 local function getOpeningFlavor()
     if _openingFlavor ~= nil then return _openingFlavor end
     local roll = RandomInt(1, 100)
-    if roll <= 22 then _openingFlavor = "lotus_rush"
-    elseif roll <= 45 then _openingFlavor = "aggro_roam"
-    elseif roll <= 70 then _openingFlavor = "passive_lane"
+    if roll <= 15 then _openingFlavor = "bounty_invade"   -- 15%: rotate to enemy bounty for FB
+    elseif roll <= 32 then _openingFlavor = "lotus_rush"
+    elseif roll <= 52 then _openingFlavor = "aggro_roam"
+    elseif roll <= 72 then _openingFlavor = "passive_lane"
     elseif roll <= 88 then _openingFlavor = "deward_scout"
     else _openingFlavor = "smoke_gank_early" end
     return _openingFlavor
+end
+
+-- Enemy bounty rune locations — used by bounty_invade opening flavor.
+-- Each team's bounties are mirrored across the map. We pick the bounty
+-- closer to the enemy team's safelane (the "near" one) for invades.
+local function getEnemyBountyLocation(myTeam)
+    if myTeam == TEAM_RADIANT then
+        -- Dire safelane bounty is near top — invade that one
+        return Vector(7456, -64, 384)
+    else
+        -- Radiant safelane bounty is near bot — invade that one
+        return Vector(-7456, 64, 384)
+    end
+end
+
+local function getMidgameFlavor(now)
+    if _midgameFlavor ~= nil then return _midgameFlavor end
+    if now < 12 * 60 then return nil end
+    local roll = RandomInt(1, 100)
+    if roll <= 25 then _midgameFlavor = "fast_siege"
+    elseif roll <= 50 then _midgameFlavor = "pickoff_focus"
+    elseif roll <= 75 then _midgameFlavor = "split_farm"
+    else _midgameFlavor = "objective_dance" end
+    return _midgameFlavor
+end
+
+local function getLateGameFlavor(now)
+    if _lateGameFlavor ~= nil then return _lateGameFlavor end
+    if now < 28 * 60 then return nil end
+    local roll = RandomInt(1, 100)
+    if roll <= 34 then _lateGameFlavor = "high_ground_rush"
+    elseif roll <= 67 then _lateGameFlavor = "aegis_stall"
+    else _lateGameFlavor = "split_and_rax" end
+    return _lateGameFlavor
 end
 
 local function computePlan(bot)
     local team = GetTeam()
     local enemyTeam = GetOpposingTeam()
     local now = DotaTime()
+    local readiness = 1.0
 
     -- Pull adaptive thresholds from game theory if available (falls back to defaults).
     local thresholds = {
@@ -544,6 +709,48 @@ local function computePlan(bot)
     if gtMod ~= nil then
         local ok, t = pcall(function() return gtMod.GetThresholds() end)
         if ok and t ~= nil then thresholds = t end
+    end
+
+    -- Strategy integration: read the live strategy and adjust thresholds /
+    -- cadences. Without this, drafted strategy was only a small ModulateDesire
+    -- multiplier and didn't drive macro plays. Whole block is wrapped in
+    -- pcall — if jmz.DraftStrategy isn't fully loaded yet (circular-require
+    -- partial-table issue), strategy stays at the default and the rest of
+    -- computePlan continues unchanged.
+    local strategy = "teamfight_mid"
+    local strategyPushMinAdj = 0
+    local strategySmokeCadenceAdj = 0
+    pcall(function()
+        local jmzMod_for_strat = jmz()
+        if jmzMod_for_strat and jmzMod_for_strat.DraftStrategy
+           and jmzMod_for_strat.DraftStrategy.GetEffectiveStrategyName then
+            local s = jmzMod_for_strat.DraftStrategy.GetEffectiveStrategyName()
+            if type(s) == "string" then strategy = s end
+        end
+    end)
+    if strategy == "early_aggro" then
+        thresholds.commitAllyThreshold = math.max(1, thresholds.commitAllyThreshold - 1)
+        thresholds.pushAllyThreshold = math.max(3, thresholds.pushAllyThreshold - 1)
+        strategySmokeCadenceAdj = -90
+        strategyPushMinAdj = -2 * 60
+    elseif strategy == "fast_siege" then
+        thresholds.pushAllyThreshold = math.max(3, thresholds.pushAllyThreshold - 1)
+        strategyPushMinAdj = -2 * 60
+    elseif strategy == "teamfight_mid" then
+        thresholds.roshAllyThreshold = math.max(2, thresholds.roshAllyThreshold - 1)
+    elseif strategy == "split_push" then
+        strategyPushMinAdj = -1 * 60
+    elseif strategy == "late_scale" then
+        thresholds.commitAllyThreshold = thresholds.commitAllyThreshold + 1
+        thresholds.pushAllyThreshold = math.min(5, thresholds.pushAllyThreshold + 1)
+        strategySmokeCadenceAdj = 60
+        strategyPushMinAdj = 2 * 60
+    elseif strategy == "turtle_defensive" then
+        thresholds.commitAllyThreshold = thresholds.commitAllyThreshold + 1
+        thresholds.pushAllyThreshold = math.min(5, thresholds.pushAllyThreshold + 1)
+        thresholds.roshAllyThreshold = thresholds.roshAllyThreshold + 1
+        strategySmokeCadenceAdj = 90
+        strategyPushMinAdj = 3 * 60
     end
 
     -- 1. DEFEND_BASE: ancient under REAL threat — Phase 14 fix.
@@ -569,6 +776,59 @@ local function computePlan(bot)
             local reason = string.format("real threat: enemies=%d hp=%.0f%% dmg=%s",
                 enemiesAtAncient, hpPct * 100, tostring(recentlyDamaged))
             return freshPlan("defend_base", nil, ourAncient:GetLocation(), reason)
+        end
+    end
+
+    -- 1.5 USER PING → push_lane / defend_lane.
+    --
+    -- User pings are an EXPLICIT command channel: "the team should be HERE
+    -- doing THAT". Previously assemble_generic responded by walking bots to
+    -- the ping — but team plan didn't issue a push_lane intent, so once
+    -- bots arrived, no mode kept them attacking. This wires the ping into
+    -- the team plan layer.
+    --
+    -- Ping on enemy-side of map → push_lane (with the ping's location;
+    -- push_tower mode finds the actual structure from there).
+    -- Ping on our side → defend_lane (treat as "help here").
+    -- 8-second window so a single ping commits the team for a push without
+    -- requiring the user to spam clicks.
+    local okJmz, jmzMod = pcall(jmz)
+    if okJmz and jmzMod and jmzMod.GetHumanPing then
+        local okPing, _, ping = pcall(function()
+            local m, p = jmzMod.GetHumanPing()
+            return m, p
+        end)
+        -- For bot-only teams (e.g. enemy team in custom lobby), there is no
+        -- human ping. Fall through to synthetic team-objective ping so the
+        -- bot-only team still gets ping-driven push/defend intents.
+        if (not okPing or ping == nil or ping.location == nil or ping.time == 0
+            or (now - ping.time) >= 8)
+           and jmzMod.SyntheticPing and jmzMod.SyntheticPing.Get then
+            local okSyn, synPing = pcall(function() return jmzMod.SyntheticPing.Get(team) end)
+            if okSyn and synPing ~= nil then
+                ping = synPing
+                okPing = true
+            end
+        end
+        if okPing and ping ~= nil and ping.location ~= nil and ping.time ~= 0
+           and (now - ping.time) < 8 then
+            -- River line is x+y=0. Radiant safe-side has x+y < 0; Dire's
+            -- safe side x+y > 0. So enemy-side for us = opposite sign.
+            local pingSum = (ping.location.x or 0) + (ping.location.y or 0)
+            local enemySide
+            if team == TEAM_RADIANT then
+                enemySide = (pingSum > 0)
+            else
+                enemySide = (pingSum < 0)
+            end
+            if enemySide then
+                return freshPlan("push_lane", nil, ping.location,
+                    "user pinged enemy side — push")
+            else
+                -- Our side: lane help, not full base defense.
+                return freshPlan("defend_lane", nil, ping.location,
+                    "user pinged own side — group up")
+            end
         end
     end
 
@@ -598,6 +858,15 @@ local function computePlan(bot)
                 end
             end
         end
+    end
+
+    -- Hoisted: TeamfightReadiness must be computed BEFORE commit_kill so the
+    -- readiness gate at the engageOK check sees real values. Otherwise it
+    -- reads the init `readiness = 1.0` and the gate is a no-op.
+    local jmzM = jmz()
+    if jmzM and jmzM.TeamState and jmzM.TeamState.TeamfightReadiness then
+        local okReady, ready = pcall(function() return jmzM.TeamState.TeamfightReadiness() end)
+        if okReady and type(ready) == "number" then readiness = ready end
     end
 
     -- 2.5 COMMIT_KILL: focus target exists + ≥ threshold allies near focus
@@ -642,7 +911,7 @@ local function computePlan(bot)
                     if jmzM_for_engage and jmzM_for_engage.TeamState and target_pid ~= nil then
                         engageOK = jmzM_for_engage.TeamState.ShouldEngage(target_pid)
                     end
-                    if engageOK then
+                    if engageOK and readiness > 0.50 then
                         return freshPlan("commit_kill", nil, focusLoc,
                             "focus=" .. (target.reason or "?") .. " allies=" .. tostring(#nearAllies) .. "/" .. tostring(effThreshold)
                             .. " score=" .. string.format("%.2f", target.score or 0))
@@ -677,7 +946,6 @@ local function computePlan(bot)
     -- big NW lead). Fires roughly once every 5-10 minutes when conditions
     -- align, not constantly.
     local roshGateSec = 15 * 60   -- not before minute 15 unless triggered
-    local jmzM = jmz()
     if jmzM and jmzM.DraftStrategy and jmzM.DraftStrategy.GetProMacro then
         local pm = jmzM.DraftStrategy.GetProMacro()
         if pm and pm.first_rosh_typical_sec and pm.first_rosh_typical_sec > 0 then
@@ -705,7 +973,7 @@ local function computePlan(bot)
             end
         end
 
-        if hasNumbersAdvantage or hasNWLead then
+        if (hasNumbersAdvantage or hasNWLead) and readiness > 0.50 then
             local roshLoc = jmz().GetCurrentRoshanLocation and jmz().GetCurrentRoshanLocation() or nil
             local reason = hasNumbersAdvantage
                 and ("rosh: numbers " .. tostring(aliveAllies) .. "v" .. tostring(aliveEnemies))
@@ -738,6 +1006,8 @@ local function computePlan(bot)
             smokeCadenceSec = pm.smoke_gank_cadence_min * 60
         end
     end
+    -- Strategy adjustment: early_aggro shortens cadence; turtle/late_scale lengthens.
+    smokeCadenceSec = math.max(60, smokeCadenceSec + (strategySmokeCadenceAdj or 0))
     if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
        and not isInCooldown("smoke_gank") then
         local grouped = countGroupedAllies(team)
@@ -766,6 +1036,8 @@ local function computePlan(bot)
             pushMinSec = pm.first_t1_fall_typical_sec * 0.6
         end
     end
+    -- Strategy adjustment: aggressive comps push earlier, scaling comps later.
+    pushMinSec = math.max(4 * 60, pushMinSec + (strategyPushMinAdj or 0))
     -- Big gold lead (>4k) overrides the min-time gate — comp that snowballs early
     -- should be allowed to press advantage.
     local nwLead = 0
@@ -800,6 +1072,8 @@ local function computePlan(bot)
             smokeCadenceSec = pm.smoke_gank_cadence_min * 60
         end
     end
+    -- Strategy adjustment: early_aggro shortens cadence; turtle/late_scale lengthens.
+    smokeCadenceSec = math.max(60, smokeCadenceSec + (strategySmokeCadenceAdj or 0))
     if now > 10 * 60 and (now - _lastSmokeGankTime) >= smokeCadenceSec
        and not isInCooldown("smoke_gank") then
         local grouped = countGroupedAllies(team)
@@ -811,10 +1085,28 @@ local function computePlan(bot)
 
     -- 5.5 MISSING ENEMIES: 3+ enemies haven't been seen in >8s after minute 5
     -- usually means a smoke/rotation incoming. Bias to regroup defensively.
+    --
+    -- Push-then-retreat fix: if the current plan is push_lane (or contest_rosh)
+    -- with high commitment, do NOT flip to regroup just because enemies dropped
+    -- vision. The user explicitly reported "team starts to push tower then
+    -- retreats for no reason." The previous behavior was: bots commit to push,
+    -- enemies smoke or jungle for 8s, missing-enemy gate fires, plan flips to
+    -- regroup, bots peel off. That's the bug.
+    --
+    -- High-commitment push_lane has had 12+ seconds of investment (commitment
+    -- 0.5 base + 0.10 from the age boost crosses 0.6); aborting it on
+    -- speculative ghost-enemy signal hurts more than it helps.
     if now > 5 * 60 then
         local missing = countMissingEnemies(enemyTeam, 8)
         if missing >= 3 then
-            return freshPlan("regroup", nil, nil, "enemies missing=" .. tostring(missing) .. " (likely smoke/rotation)")
+            local cur = currentPlan or {}
+            local curCommit = cur.commitment or 0
+            local stickyIntent = cur.intent == "push_lane" or cur.intent == "contest_rosh"
+            if stickyIntent and curCommit > 0.6 then
+                -- skip the regroup override; let the next gates run
+            else
+                return freshPlan("regroup", nil, nil, "enemies missing=" .. tostring(missing) .. " (likely smoke/rotation)")
+            end
         end
     end
 
@@ -832,6 +1124,24 @@ local function computePlan(bot)
         end
     end
     if now > lateGameGateSec then
+        -- Late-game offensive override: when winning (NW lead + alive parity),
+        -- promote the late-game fallback from defensive assembly (front-line
+        -- tower) to push_lane targeting the enemy's weakest lane. User
+        -- complaint: "team also does not stick together mid late game to
+        -- push towers or gain objects" — the old fallback assembled at OUR
+        -- frontmost tower regardless of game state, so winning teams stalled
+        -- defensively instead of closing.
+        local aliveAllies = countAliveTeamHeroes(team)
+        local aliveEnemies = countAliveTeamHeroes(enemyTeam)
+        local winning = (nwLead >= 4000) and (aliveAllies >= aliveEnemies) and (aliveAllies >= 4)
+        if winning and not isInCooldown("push_lane") then
+            local pushTarget = findPushTarget(enemyTeam, team, thresholds.pushAllyThreshold)
+            if pushTarget ~= nil then
+                _lastPushLaneTime = now
+                return freshPlan("push_lane", pushTarget.lane, pushTarget.loc,
+                    "late-game winning: push instead of group-defend")
+            end
+        end
         local groupLoc = computeGroupLocation(team)
         if groupLoc ~= nil then
             return freshPlan("late_game_group", nil, groupLoc, "late game: hold front-line tower")
@@ -848,12 +1158,20 @@ local function computePlan(bot)
     -- per match; applies during laning phase when no urgent intent fires.
     if now < 4 * 60 then
         local flavor = getOpeningFlavor()
-        if flavor == "lotus_rush" then
-            -- Bias toward lotus pickup even if normal gate wouldn't fire yet
-            local lotusReady, lotusLoc = isLotusContestable(team, now)
-            if lotusReady then
-                return freshPlan("contest_lotus", nil, lotusLoc, "opening: lotus_rush")
+        if flavor == "bounty_invade" then
+            -- Pre-game and first 90s only — invade enemy bounty for FB / steal.
+            -- Routes the team to the enemy bounty location via smoke_gank
+            -- intent. Role gating on smoke_gank ({1,2,3,4,5}) means whole
+            -- team converges; user wanted occasional FB pressure, not every
+            -- match. Capped at 90s — past that, stale invade risks 5-man
+            -- counter-gank from enemy team that's now grouped.
+            if now < 90 then
+                local enemyBounty = getEnemyBountyLocation(team)
+                return freshPlan("smoke_gank", nil, enemyBounty, "opening: bounty_invade")
             end
+            -- After the invade window, fall through to lane.
+        elseif flavor == "lotus_rush" then
+            return freshPlan("lane_gank", nil, nil, "opening: lotus_rush->support_rotation")
         elseif flavor == "aggro_roam" or flavor == "smoke_gank_early" then
             -- Bias toward team_roam even without a low-HP focus (opportunistic rotations)
             return freshPlan("smoke_gank", nil, nil, "opening: " .. flavor)
@@ -861,6 +1179,32 @@ local function computePlan(bot)
             return freshPlan("regroup", nil, nil, "opening: deward_scout (ward coverage)")
         end
         -- passive_lane falls through to farm — default safe laning
+    end
+
+    if now >= 12 * 60 and now <= 24 * 60 then
+        local flavor = getMidgameFlavor(now)
+        if flavor == "fast_siege" then
+            return freshPlan("push_lane", nil, nil, "mid flavor: fast_siege")
+        elseif flavor == "pickoff_focus" then
+            return freshPlan("smoke_gank", nil, nil, "mid flavor: pickoff_focus")
+        elseif flavor == "split_farm" then
+            return freshPlan("farm", nil, nil, "mid flavor: split_farm")
+        elseif flavor == "objective_dance" then
+            return freshPlan("regroup", nil, nil, "mid flavor: objective_dance")
+        end
+    end
+
+    if now >= 28 * 60 then
+        local flavor = getLateGameFlavor(now)
+        if flavor == "high_ground_rush" then
+            return freshPlan("push_lane", nil, nil, "late flavor: high_ground_rush")
+        elseif flavor == "aegis_stall" then
+            -- Phase 14: aegis_stall must NOT bypass the rosh gate above.
+            -- Stall semantics = group up & wait, not "go to roshpit again".
+            return freshPlan("regroup", nil, nil, "late flavor: aegis_stall")
+        elseif flavor == "split_and_rax" then
+            return freshPlan("smoke_gank", nil, nil, "late flavor: split_and_rax")
+        end
     end
 
     -- 7. FARM default
@@ -982,6 +1326,15 @@ function ____exports.MaybeRecompute(bot)
     plan.validUntil = now + PLAN_TTL
     local okPid, pid = pcall(function() return bot:GetPlayerID() end)
     if okPid then plan.authorID = pid end
+
+    -- Commitment: how authoritatively GetPlanBias enforces this plan.
+    -- Sticky intents grow commitment with age (anti-flip). The previous
+    -- intent's start time stays in _intentStartTime if trackIntent didn't
+    -- rotate it, so we read it for the age boost.
+    local intentStart = _intentStartTime[plan.intent]
+    local planAge = (intentStart ~= nil) and (now - intentStart) or 0
+    plan.commitment = computeCommitment(plan.intent, planAge)
+
     currentPlan = plan
     return plan
 end
@@ -1114,6 +1467,27 @@ function ____exports.GetPlanBias(bot, mode, teamSpirit)
     end
 
     local m = getMatch(plan.intent, mode)
+    local commitment = plan.commitment or 0.5
+
+    -- High-commitment plans are AUTHORITATIVE: bypass the teamSpirit
+    -- dampener and widen the bias range so contradicting modes get
+    -- hammered (~0.2x) and aligned modes get amplified (~1.6x). This
+    -- is what makes defend_base, push during a winning state, and
+    -- save_ally actually coordinate the whole team rather than
+    -- losing to one bot's high greed/independence personality.
+    --
+    -- Threshold 0.6 picked so push_lane crosses it after ~12s of
+    -- continuous push (base 0.50 + 0.10 age boost). Defensive intents
+    -- (defend_base 1.00, save_ally 0.95) are over the threshold from
+    -- the first tick they fire.
+    if commitment > 0.6 then
+        local expand = (commitment - 0.6) / 0.4 * 0.3
+        local lo = MIN_MULT - expand   -- 0.5 → 0.2 at full commit
+        local hi = MAX_MULT + expand   -- 1.3 → 1.6 at full commit
+        return lerp(lo, hi, m)
+    end
+
+    -- Low commitment: advisory, dampened by teamSpirit (existing behavior).
     local compliantMult = lerp(MIN_MULT, MAX_MULT, m)
     return 1.0 + clamp01(teamSpirit) * (compliantMult - 1.0)
 end

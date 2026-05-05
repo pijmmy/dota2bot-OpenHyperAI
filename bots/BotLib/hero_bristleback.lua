@@ -284,6 +284,7 @@ function X.ConsiderViscousNasalGoo()
 		and J.CanBeAttacked(botTarget)
         and J.CanCastOnNonMagicImmune(botTarget)
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and fManaAfter > fManaThreshold1
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget
@@ -384,6 +385,7 @@ function X.ConsiderQuillSpray()
 		and J.CanBeAttacked(botTarget)
         and J.CanCastOnMagicImmune(botTarget)
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
 			return BOT_ACTION_DESIRE_HIGH
 		end
@@ -489,6 +491,7 @@ function X.ConsiderBristleback()
 			and not enemyHero:HasModifier('modifier_abaddon_borrowed_time')
 			and not enemyHero:HasModifier('modifier_dazzle_shallow_grave')
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			and enemyHero:GetAttackTarget() == bot
 			then
 				local nInRangeAlly = J.GetAlliesNearLoc(bot:GetLocation(), 1200)
@@ -587,6 +590,7 @@ function X.ConsiderHairball()
 			and J.CanCastOnNonMagicImmune(enemyHero)
 			and J.IsInRange(bot, enemyHero, nCastRange)
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				if J.IsChasingTarget(enemyHero, bot)
 				or (#nEnemyHeroes > #nAllyHeroes and enemyHero:GetAttackTarget() == bot)

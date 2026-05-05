@@ -742,6 +742,7 @@ function X.ConsiderR()
 			and J.IsInRange( bot, botTarget, nCastRange )
 			and J.CanCastOnNonMagicImmune( botTarget )
 			and J.CanCastOnTargetAdvanced( botTarget )
+			and not J.HasDamageImmunityModifier( botTarget )
 		then
 			return BOT_ACTION_DESIRE_HIGH, botTarget, "R-Attack:"..J.Chat.GetNormName( botTarget )
 		end

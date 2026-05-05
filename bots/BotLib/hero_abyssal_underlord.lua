@@ -194,6 +194,7 @@ function X.ConsiderFirestorm()
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
         and not botTarget:HasModifier('modifier_oracle_false_promise_timer')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -308,6 +309,7 @@ function X.ConsiderPitOfMalice()
         and J.IsInRange(bot, botTarget, nCastRange + nRadius)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+        and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nInRangeAlly = J.GetNearbyHeroes(botTarget, 1200, true, BOT_MODE_NONE)
             local nInRangeEnemy = J.GetNearbyHeroes(botTarget, 1200, false, BOT_MODE_NONE)
@@ -358,9 +360,9 @@ function X.ConsiderPitOfMalice()
         local nInRangeAlly = J.GetNearbyHeroes(bot,1200, false, BOT_MODE_NONE)
         local nInRangeEnemy = J.GetEnemiesNearLoc(nLocationAoE.targetloc, nRadius)
 
+		-- Dropped over-cautious "+1 advantage" guard (Doom-class pattern).
 		if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
         and #nInRangeEnemy >= 1
-        and not (#nInRangeAlly > #nInRangeEnemy + 1)
 		then
 			return BOT_ACTION_DESIRE_HIGH, nLocationAoE.targetloc
 		end

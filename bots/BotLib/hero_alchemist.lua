@@ -180,6 +180,7 @@ function X.ConsiderAcidSpray()
 		and not J.IsSuspiciousIllusion(botTarget)
 		and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
 		and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+		and not J.HasDamageImmunityModifier(botTarget)
 		and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 		and #nInRangeAlly >= #nInRangeEnemy
 		then
@@ -348,6 +349,7 @@ function X.ConsiderUnstableConcoction()
 			and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
 			and not enemyHero:HasModifier('modifier_legion_commander_duel')
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			then
 				local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1000, false, BOT_MODE_NONE)
 
@@ -443,6 +445,7 @@ function X.ConsiderUnstableConcoctionThrow()
 			and not enemyHero:HasModifier('modifier_faceless_void_chronosphere_freeze')
 			and not enemyHero:HasModifier('modifier_legion_commander_duel')
 			and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+			and not J.HasDamageImmunityModifier(enemyHero)
 			and DotaTime() >= ConcoctionThrowTime + offDuration
 			then
 				local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1000, false, BOT_MODE_NONE)
@@ -518,6 +521,7 @@ function X.ConsiderChemicalRage()
 		and not botTarget:HasModifier('modifier_enigma_black_hole_pull')
 		and not botTarget:HasModifier('modifier_faceless_void_chronosphere_freeze')
 		and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+		and not J.HasDamageImmunityModifier(botTarget)
 		then
             local nTargetInRangeAlly = J.GetNearbyHeroes(botTarget, 1000, false, BOT_MODE_NONE)
 

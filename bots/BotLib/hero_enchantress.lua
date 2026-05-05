@@ -220,6 +220,7 @@ function X.ConsiderImpetus()
         and J.CanCastOnNonMagicImmune(botTarget)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(botTarget)
         and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
         and #nInRangeAlly >= #nInRangeEnemy
         then
@@ -364,6 +365,7 @@ function X.ConsiderEnchant()
         and J.IsInRange(bot, botTarget, nCastRange)
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(botTarget)
         and not botTarget:HasModifier('modifier_faceless_void_chronosphere')
         and nInRangeAlly ~= nil and nInRangeEnemy ~= nil
         and ((#nInRangeAlly >= #nInRangeEnemy) or (#nInRangeEnemy > #nInRangeAlly and J.WeAreStronger(bot, nCastRange + 100)))
@@ -452,6 +454,7 @@ function X.ConsiderSproink()
         and not J.IsSuspiciousIllusion(botTarget)
         and not botTarget:HasModifier('modifier_abaddon_borrowed_time')
         and not botTarget:HasModifier('modifier_dazzle_shallow_grave')
+        and not J.HasDamageImmunityModifier(botTarget)
         then
             return BOT_ACTION_DESIRE_HIGH
         end
@@ -505,6 +508,7 @@ function X.ConsiderLittleFriends()
         and #nTargetInRangeEnemy >= 1
         and not J.IsSuspiciousIllusion(npcTarget)
         and not npcTarget:HasModifier('modifier_abaddon_borrowed_time')
+        and not J.HasDamageImmunityModifier(npcTarget)
         and not npcTarget:HasModifier('modifier_faceless_void_chronosphere')
         then
             local botTarget = J.GetStrongestUnit(nCastRange, bot, true, false, nDuration)

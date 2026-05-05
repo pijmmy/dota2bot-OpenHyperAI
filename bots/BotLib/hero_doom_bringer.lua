@@ -371,6 +371,7 @@ function X.ConsiderScorchedEarth()
             and not J.IsSuspiciousIllusion(enemyHero)
             and not J.IsDisabled(enemyHero)
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, false, BOT_MODE_NONE)
@@ -514,6 +515,7 @@ function X.ConsiderInfernalBlade()
             and not J.IsSuspiciousIllusion(enemyHero)
             and not J.IsDisabled(enemyHero)
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(enemyHero)
             then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, true, BOT_MODE_NONE)
                 local nTargetInRangeAlly = J.GetNearbyHeroes(enemyHero, 1200, false, BOT_MODE_NONE)
@@ -616,6 +618,7 @@ function X.ConsiderDoom()
             and not enemyHero:HasModifier('modifier_necrolyte_reapers_scythe')
             and not enemyHero:HasModifier('modifier_oracle_false_promise_timer')
             and not enemyHero:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
+            and not J.HasDamageImmunityModifier(enemyHero)
 			then
                 local nInRangeAlly = J.GetNearbyHeroes(enemyHero, 1600, true, BOT_MODE_NONE)
                 local nInRangeEnemy = J.GetNearbyHeroes(enemyHero, 1600, false, BOT_MODE_NONE)
@@ -635,27 +638,23 @@ function X.ConsiderDoom()
 
 		if target ~= nil
 		then
-            local nInRangeAlly = J.GetNearbyHeroes(target, 1600, true, BOT_MODE_NONE)
-            local nInRangeEnemy = J.GetNearbyHeroes(target, 1600, false, BOT_MODE_NONE)
-
-            if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
+            -- Old gate required `not (allies >= enemies + 2)` — Doom would
+            -- skip ult during winning fights (5v3, full-team push). Doom's
+            -- ult is a single-target lockout; the "save it for tougher
+            -- fights" instinct doesn't apply when this specific target
+            -- (high-value core, channeler, BKB-less carry) is right there.
+            -- Now: ult fires whenever the target is castable AND the fight
+            -- is actually happening. Laning still requires an HP threshold
+            -- so we don't waste ult on a creep-aggro skirmish.
+            if J.IsInLaningPhase()
             then
-                if J.IsInLaningPhase()
+                if J.IsAttacking(target)
+                and target:GetHealth() <= bot:GetEstimatedDamageToTarget(true, target, nDuration, DAMAGE_TYPE_ALL)
                 then
-                    if not (#nInRangeAlly >= #nInRangeEnemy + 2)
-                    and J.IsAttacking(target)
-                    then
-                        if target:GetHealth() <= bot:GetEstimatedDamageToTarget(true, target, nDuration, DAMAGE_TYPE_ALL)
-                        then
-                            return BOT_ACTION_DESIRE_HIGH, target
-                        end
-                    end
-                else
-                    if not (#nInRangeAlly >= #nInRangeEnemy + 2)
-                    then
-                        return BOT_ACTION_DESIRE_HIGH, target
-                    end
+                    return BOT_ACTION_DESIRE_HIGH, target
                 end
+            else
+                return BOT_ACTION_DESIRE_HIGH, target
             end
 		end
 	end
@@ -1143,6 +1142,7 @@ function X.ConsiderDevourAbility(DevouredAbility)
             and not J.IsSuspiciousIllusion(botTarget)
             and not J.IsDisabled(botTarget)
             and not botTarget:HasModifier('modifier_necrolyte_reapers_scythe')
+            and not J.HasDamageImmunityModifier(botTarget)
             then
                 local nInRangeAlly = J.GetNearbyHeroes(bot,1200, false, BOT_MODE_NONE)
                 local nInRangeEnemy = J.GetNearbyHeroes(bot,1200, true, BOT_MODE_NONE)

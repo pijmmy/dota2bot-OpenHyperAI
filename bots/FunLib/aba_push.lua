@@ -46,6 +46,17 @@ local getCachedAlliesNearLoc = ____global_cache.getCachedAlliesNearLoc
 local getCachedEnemiesNearLoc = ____global_cache.getCachedEnemiesNearLoc
 local autoCleanupCache = ____global_cache.autoCleanupCache
 local getCachedData = ____global_cache.getCachedData
+
+-- Per-bot stickiness for the special-creep attack-target picker. Without
+-- this, the iteration order of GetSpecialUnitsNearby (which mixes creeps
+-- + summoned heroes — brood spiderlings, lycan wolves, lone druid bear,
+-- etc.) can vary tick-to-tick, making bot:Action_AttackUnit jump between
+-- spiderlings and the bot can't land an attack on any of them. Reported
+-- as the "Doom dithers at broodmother spiders" symptom. 1.5s lock keeps
+-- the bot committed to one target long enough for the swing to complete.
+local _lastSpecialTarget = {}
+local SPECIAL_TARGET_LOCK_SEC = 1.5
+
 function updateGameStateCache()
     local now = DotaTime()
     if gameStateCache and now - gameStateCache.lastUpdate < PUSH_CACHE_TTL then
@@ -812,6 +823,24 @@ function ____exports.PushThink(bot, lane)
     local vTeamFountain = locationState.teamFountain
     local bTowerNearby = jmz.IsValidBuilding(nEnemyTowers[1])
     local towerDistanceToFountain = bTowerNearby and GetUnitToLocationDistance(nEnemyTowers[1], vTeamFountain) or 0
+
+    -- Stickiness: if we attacked a special unit recently and it's still
+    -- valid + in range + on the right side of the tower threshold, attack
+    -- it again. This prevents the per-tick reselection that causes the
+    -- broodmother-spiderling dither.
+    local pid = bot:GetPlayerID()
+    local cached = _lastSpecialTarget[pid]
+    if cached ~= nil and cached.expires > now then
+        local u = cached.unit
+        if jmz.IsValid(u) and jmz.CanBeAttacked(u)
+           and not jmz.IsTormentor(u) and not jmz.IsRoshan(u)
+           and jmz.IsInRange(bot, u, nRange)
+           and (not bTowerNearby or GetUnitToLocationDistance(u, vTeamFountain) < towerDistanceToFountain) then
+            bot:Action_AttackUnit(u, true)
+            return
+        end
+    end
+
     for ____, creep in ipairs(nCreeps) do
         do
             local __continue120
@@ -829,6 +858,7 @@ function ____exports.PushThink(bot, lane)
                     break
                 end
                 bot:Action_AttackUnit(creep, true)
+                _lastSpecialTarget[pid] = { unit = creep, expires = now + SPECIAL_TARGET_LOCK_SEC }
                 return
             until true
             if not __continue120 then
