@@ -103,7 +103,9 @@ end
 -- ============================================================
 
 local ATTACK_HOLD_SEC = 1.5
+local RETREAT_COOLDOWN_SEC = 2.5
 local _lastInAttackTime = -100
+local _lastInRetreatTime = -100
 local function _attackHoldHysteresis(desireFromCap)
 	-- Honor the dive cap's verdict — don't elevate desire when it
 	-- already dropped us to suppress a tower-dive.
@@ -111,15 +113,32 @@ local function _attackHoldHysteresis(desireFromCap)
 		return desireFromCap
 	end
 
-	-- Stamp last-attacking tick. GetActiveMode reflects the previous
-	-- tick's chosen mode, which is the right signal for "were we
-	-- attacking very recently?".
+	-- Stamp last-active mode tick. GetActiveMode reflects the previous
+	-- tick's chosen mode.
 	local mode = bot:GetActiveMode()
 	if mode == BOT_MODE_ATTACK then
 		_lastInAttackTime = DotaTime()
+	elseif mode == BOT_MODE_RETREAT then
+		_lastInRetreatTime = DotaTime()
 	end
 
-	-- Within hold window AND have a viable target nearby => hold floor.
+	-- Retreat-then-reengage suppression. User report: "I dove phoenix
+	-- who came back at me after retreating. poor logic." Cause: bot
+	-- exits RETREAT mode (HP regenerated, distance grew briefly), engine
+	-- recomputes ATTACK desire on the still-nearby same enemy. Bot
+	-- pivots, walks BACK at the threat that just chased it. Toggle.
+	--
+	-- Cure: for RETREAT_COOLDOWN_SEC after we were last in retreat,
+	-- suppress ATTACK desire to LOW. Forces the bot to actually clear
+	-- the retreat (move further away, regen, ally arrival, target
+	-- leaves) before considering re-engagement. RETREAT mode's own
+	-- desire stays intact — this only depresses the ATTACK desire that
+	-- would otherwise win after retreat exits.
+	if DotaTime() - _lastInRetreatTime < RETREAT_COOLDOWN_SEC then
+		return 0.1
+	end
+
+	-- Within attack-hold window AND have a viable target nearby => hold floor.
 	if DotaTime() - _lastInAttackTime < ATTACK_HOLD_SEC then
 		local tgt = bot:GetTarget()
 		if tgt ~= nil and not tgt:IsNull() and tgt:IsAlive()
@@ -137,9 +156,73 @@ local function _attackHoldHysteresis(desireFromCap)
 	return desireFromCap
 end
 
+-- ============================================================
+-- Human-ally kill yield (applies to ALL 127 heroes)
+--
+-- User report: "winning 8-0 same issue discussed about my team always
+-- getting ahead early game. I didnt get the kills so clearly there is
+-- a problem with the bots." The user wants the human carry to land
+-- the kill blow when they're already engaged on a low-HP enemy.
+--
+-- Cure: suppress ATTACK desire when (a) a low-HP enemy hero is nearby,
+-- (b) a human ally is closer to that enemy than the bot, (c) the human
+-- ally is moving toward the enemy or attacking them. This makes the bot
+-- pause attacks for ~1 second so the human's auto-attack lands the
+-- killing blow. Bot resumes normal logic on next tick.
+--
+-- Limited to LATE-laning HP threshold (HP < 0.35) so this doesn't
+-- prevent bots from helping in real fights — only nicks the kill
+-- credit when the human is already winning the duel.
+-- ============================================================
+
+local KILL_YIELD_HP_THRESHOLD = 0.35
+local KILL_YIELD_RADIUS = 800
+local function _humanKillYield(desireFromHold)
+	-- Only operate when desire is being elevated (we'd otherwise attack).
+	-- Don't override dive cap (0.1) — that's already suppressing.
+	if desireFromHold == nil or desireFromHold <= 0.15 then
+		return desireFromHold
+	end
+
+	local enemies = bot:GetNearbyHeroes(KILL_YIELD_RADIUS, true, BOT_MODE_NONE)
+	if enemies == nil then return desireFromHold end
+
+	for i = 1, #enemies do
+		local e = enemies[i]
+		if e ~= nil and not e:IsNull() and e:IsAlive()
+			and not e:IsIllusion()
+			and e:GetMaxHealth() > 0
+			and (e:GetHealth() / e:GetMaxHealth()) < KILL_YIELD_HP_THRESHOLD
+		then
+			local enemyLoc = e:GetLocation()
+			local botDist = GetUnitToUnitDistance(bot, e)
+
+			-- Find a human ally closer to this enemy than `bot`.
+			for ai = 1, 5 do
+				local ally = GetTeamMember(ai)
+				if ally ~= nil and ally ~= bot
+					and not ally:IsNull() and ally:IsAlive()
+					and not ally:IsIllusion() and not ally:IsBot()
+				then
+					local allyDist = GetUnitToLocationDistance(ally, enemyLoc)
+					if allyDist < botDist and allyDist < 800 then
+						-- Human is closer + in range. Yield: drop ATTACK
+						-- to LOW so the bot doesn't compete for the kill.
+						-- Returns 0.1 — same level as dive-cap suppression.
+						return 0.1
+					end
+				end
+			end
+		end
+	end
+
+	return desireFromHold
+end
+
 local function _applyUniversalGuards(innerDesire)
 	local capped = _universalDiveCap(innerDesire)
-	return _attackHoldHysteresis(capped)
+	local held = _attackHoldHysteresis(capped)
+	return _humanKillYield(held)
 end
 
 if local_mode_attack_generic ~= nil then
