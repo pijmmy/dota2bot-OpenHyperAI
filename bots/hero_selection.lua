@@ -12,7 +12,26 @@
 --    5) Weak penalty curve during scoring is configurable in Customize.*
 --==============================================================================
 
-require( GetScriptDirectory()..'/FunLib/aba_global_overrides' )
+-- Chat-channel diagnostic probe (May 2026). Confirms hero_selection.lua
+-- loaded. If absent in console.NNN.log via the FindSafe-localize chain,
+-- this script crashed at load time. The require below is the prime
+-- suspect — wrapping it in pcall reveals the real error.
+do
+	local _bot = nil
+	pcall(function() _bot = GetBot() end)
+	if _bot then
+		pcall(function() _bot:ActionImmediate_Chat("[OHA-LOAD] hero_selection.lua", false) end)
+	end
+end
+
+local _ok_globalOverrides, _err_globalOverrides = pcall(require, GetScriptDirectory()..'/FunLib/aba_global_overrides')
+if not _ok_globalOverrides then
+	local _bot = nil
+	pcall(function() _bot = GetBot() end)
+	if _bot then
+		pcall(function() _bot:ActionImmediate_Chat("[OHA-REQ-FAIL] aba_global_overrides err="..tostring(_err_globalOverrides):sub(1,80), false) end)
+	end
+end
 
 local X = {}
 

@@ -22,16 +22,50 @@ pcall(function() bot:ActionImmediate_Chat("[OHA-PROBE-CHAT] "..botName, false) e
 local team = GetTeam()
 local bDebugMode = ( 10 == 10 )
 
-local J = require( GetScriptDirectory()..'/FunLib/jmz_func' )
-local Utils = require( GetScriptDirectory()..'/FunLib/utils' )
-local BotBuild = dofile( GetScriptDirectory().."/BotLib/"..string.gsub( botName, "npc_dota_", "" ) )
-local Localization = require( GetScriptDirectory()..'/FunLib/localization' )
-local Customize = require(GetScriptDirectory()..'/Customize/general')
-Customize.ThinkLess = Customize.Enable and Customize.ThinkLess or 1
+-- Per-require pcall wrappers + chat-channel error reporting. The
+-- "error in error handling" cascade we see at game-load time has no
+-- attached error text in console.log. Wrapping each load in pcall +
+-- chatting the actual error lets us see which require/dofile fails.
+-- See diagnostic probe lines 7-21 for channel discovery. Chat
+-- captures via Localization System "FindSafe failed to localize"
+-- warnings (a side effect that turns out to be a reliable channel).
+local function _ohaChat(msg)
+	pcall(function() bot:ActionImmediate_Chat(msg, false) end)
+end
+
+local function _ohaRequire(path)
+	local ok, mod = pcall(require, path)
+	if not ok then
+		_ohaChat("[OHA-REQ-FAIL] "..botName.." path="..path.." err="..tostring(mod):sub(1, 80))
+		return nil
+	end
+	return mod
+end
+
+local function _ohaDofile(path)
+	local ok, mod = pcall(dofile, path)
+	if not ok then
+		_ohaChat("[OHA-DOFILE-FAIL] "..botName.." path="..path.." err="..tostring(mod):sub(1, 80))
+		return nil
+	end
+	return mod
+end
+
+local J = _ohaRequire( GetScriptDirectory()..'/FunLib/jmz_func' )
+local Utils = _ohaRequire( GetScriptDirectory()..'/FunLib/utils' )
+local BotBuild = _ohaDofile( GetScriptDirectory().."/BotLib/"..string.gsub( botName, "npc_dota_", "" ) )
+local Localization = _ohaRequire( GetScriptDirectory()..'/FunLib/localization' )
+local Customize = _ohaRequire(GetScriptDirectory()..'/Customize/general')
+if Customize then
+	Customize.ThinkLess = Customize.Enable and Customize.ThinkLess or 1
+end
 if GAMEMODE_TURBO == nil then GAMEMODE_TURBO = 23 end
 if GAMEMODE_ARDM == nil then GAMEMODE_ARDM = 20 end
 
-if BotBuild == nil then return end
+if BotBuild == nil then
+	_ohaChat("[OHA-NIL-BOTBUILD] "..botName.." (BotBuild nil after dofile)")
+	return
+end
 
 local bDeafaultAbilityHero = BotBuild['bDeafaultAbility']
 local bDeafaultItemHero = BotBuild['bDeafaultItem']
