@@ -17,6 +17,33 @@ local bClearMode = false
 local badEventCaptured = false
 local lastMidPathKey = nil
 
+-- One-time load print so we can verify bot scripts are loading at all in
+-- console.NNN.log. If you see [OHA-LOAD] mode_attack_generic <hero>, the
+-- module loaded. If absent, the script never even got past require().
+print('[OHA-LOAD] mode_attack_generic ' .. (bot and bot:GetUnitName() or '?'))
+
+-- Diagnostic error logger. Wraps a per-tick function in pcall and prints
+-- the actual error message + traceback the FIRST time it happens per
+-- (mode, error). Without this, Dota squelches "error in error handling"
+-- with no detail and we can't see what's actually broken.
+local _seenErrors = {}
+local function safeCall(tag, fn, ...)
+	local args = {...}
+	local ok, errOrResult = xpcall(
+		function() return fn(unpack(args)) end,
+		function(err)
+			return tostring(err) .. '\n' .. (debug and debug.traceback() or '')
+		end
+	)
+	if ok then return errOrResult end
+	local key = tag .. '|' .. tostring(errOrResult):sub(1, 120)
+	if not _seenErrors[key] then
+		_seenErrors[key] = true
+		print('[OHA-ERR] ' .. tag .. ' bot=' .. (bot and bot:GetUnitName() or '?') .. ' err=' .. tostring(errOrResult))
+	end
+	return nil
+end
+
 local function IsMidEarlyWindow()
 	local t = DotaTime()
 	return t >= 30 and t <= 180 and bot:GetAssignedLane() == LANE_MID
@@ -45,7 +72,10 @@ function Generic.OnEnd()
 	helpAlly.should = false
 end
 
-function Generic.GetDesire()
+-- Internal impl. Wrapped by Generic.GetDesire below in safeCall so we
+-- surface real Lua errors to console.log instead of Dota's opaque
+-- "error in error handling" squelch.
+local function _GetDesireImpl()
 	if not bot:IsAlive()
 	or bot:IsIllusion()
 	or bot:HasModifier('modifier_fountain_fury_swipes_damage_increase')
@@ -254,10 +284,17 @@ function Generic.GetDesire()
 	return GetActualDesire(BOT_MODE_DESIRE_NONE)
 end
 
+-- Public GetDesire: wraps the impl in safeCall so real errors surface.
+function Generic.GetDesire()
+	local result = safeCall('GetDesire', _GetDesireImpl)
+	if type(result) == 'number' then return result end
+	return BOT_MODE_DESIRE_NONE
+end
+
 --------------------------------------------------------------------
 -- Think
 --------------------------------------------------------------------
-function Generic.Think()
+local function _ThinkImpl()
 	if J.CanNotUseAction(bot) then return end
 
 	local nEnemyHeroes = bot:GetNearbyHeroes(1600, true, BOT_MODE_NONE)
@@ -447,6 +484,11 @@ function Generic.Think()
 	end
 
 	bClearMode = true
+end
+
+-- Public Think: wraps the impl in safeCall so real errors surface.
+function Generic.Think()
+	safeCall('Think', _ThinkImpl)
 end
 
 -- Desire smoothing (reference pattern)

@@ -2,7 +2,7 @@
 
 This is a step-by-step runbook for quickly updating the bot scripts when Valve releases a new Dota 2 patch. Designed to be followed by a developer or AI assistant without needing to re-read the entire codebase.
 
-**Last updated for:** Patch 7.41a (March 2026)
+**Last updated for:** Patch 7.41b (May 2026 — verified against datafeed listing 7.41b dated Nov 22 2025; engine binary May 04 2026 build 6783 still on this patch)
 
 ---
 
