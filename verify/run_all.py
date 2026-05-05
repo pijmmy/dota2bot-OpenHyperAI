@@ -39,6 +39,9 @@ TESTS = [
     "test_skywrath_harass_gate.py",
     "test_support_farm_contention.py",
     "test_team_roam_engage_override.py",
+    "test_bounty_core_coverage.py",
+    "test_retreat_reengage_hold.py",
+    "test_human_kill_yield.py",
 ]
 
 def main():

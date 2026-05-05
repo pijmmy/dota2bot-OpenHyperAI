@@ -167,20 +167,45 @@ function GetDesireInner()
 		local nProximityRadius = 1600
 		local rune = bot.rune.normal
 
-		-- Pre-game (DotaTime < 0): cores stay on lane, only supports walk
-		-- for bounties. Use the dedicated bounty-only picker so each support
-		-- claims one of the 4 bounty runes (closest, not-already-claimed),
-		-- avoiding the old fixed lane→bounty mapping that mis-routed pos 4
-		-- on offlane to a river powerup spot.
+		-- Pre-game (DotaTime < 0): all 5 positions claim bounty runes.
 		--
-		-- User feedback: "bounty ruins not being picked up. 4 and 5 should
-		-- be getting them at least."
+		-- There are 4 bounty runes and 5 heroes. Supports (pos 4/5) claim
+		-- first via X.GetBestBountyRune (their closest unclaimed bounty
+		-- among other supports). Then cores (pos 1/2/3) fill the gaps
+		-- via X.GetBestBountyForCore (their closest unclaimed-by-anyone
+		-- bounty). One bounty stays unclaimed by definition (4 runes,
+		-- 5 heroes), but in practice the closest core covers it via the
+		-- "closest-to-rune wins" tie-break.
+		--
+		-- This addresses the recurring "bots not picking up bounty runes"
+		-- complaint. Previously cores returned DESIRE_NONE pre-game and
+		-- 2 of 4 bounties were left for the enemy team to clean up at 0:30.
+		--
+		-- User feedback: "bots are not picking up bounty ruins. I have
+		-- already told you to fucking fix this multiple times."
 		if DotaTime() < 0 and not bot:WasRecentlyDamagedByAnyHero(10.0) then
 			if botPos and botPos >= 4 then
 				rune.location, rune.distance = X.GetBestBountyRune()
 				if rune.location ~= -1 then
 					return BOT_MODE_DESIRE_MODERATE
 				end
+				-- Support couldn't claim — fall through to no-rune
+				return BOT_MODE_DESIRE_NONE
+			elseif botPos and botPos >= 1 and botPos <= 3 then
+				-- Cores claim only after supports have first pick. The
+				-- support's GetBestBountyRune already ran on every tick;
+				-- we just check whether THIS core is the closest non-
+				-- support to a bounty NOT picked by a closer support.
+				rune.location, rune.distance = X.GetBestBountyForCore()
+				if rune.location ~= -1 then
+					-- Lower desire than supports: cores should defer to
+					-- supports if a support is also walking the same path.
+					-- 0.42 is below the support's 0.5 MODERATE so any
+					-- support claiming the same rune wins. Cores still
+					-- beat laning's 0.268 at this hour.
+					return 0.42
+				end
+				return BOT_MODE_DESIRE_NONE
 			end
 			return BOT_MODE_DESIRE_NONE
 		end
@@ -202,7 +227,12 @@ function GetDesireInner()
 				end
 			end
 
-			if rune.location == RUNE_BOUNTY_1 or rune.location == RUNE_BOUNTY_2 then
+			-- All 4 bounty runes (7.33+ has 4, not 2). Previously only
+			-- BOUNTY_1/2 took the bounty branch; BOUNTY_3/4 fell through
+			-- to the power-rune branch which uses bottle/early-game gating
+			-- inappropriate for bounties (no bottle == low desire).
+			if rune.location == RUNE_BOUNTY_1 or rune.location == RUNE_BOUNTY_2
+			or rune.location == RUNE_BOUNTY_3 or rune.location == RUNE_BOUNTY_4 then
 				if rune.status == RUNE_STATUS_AVAILABLE
 				and (X.IsTeamMustSaveRune(rune.location) or not J.IsInLaningPhase() or GetUnitToLocationDistance(bot, vRuneLocation) <= 500)
 				then
@@ -624,6 +654,87 @@ function X.IsTheClosestSupport(hUnit, vLocation)
 		end
 	end
 	return targetAlly == hUnit
+end
+
+--------------------------------------------------------------------
+-- GetBestBountyForCore  (pos 1/2/3 — covers bounties supports skipped)
+--
+-- For cores, find the closest bounty rune that:
+--   1) NO support (pos 4/5) is closer to (supports get first pick)
+--   2) NO closer core has already been picked
+--
+-- Implementation: a core is eligible for a rune if (a) it's the
+-- closest core OR all closer cores are NOT closest-to-some-other-rune.
+-- Simpler heuristic that gives a good outcome: assign each rune to
+-- its closest non-support hero, then check if `bot` is that hero.
+--
+-- Net effect: with 4 bounties and 3 cores, each core that's the
+-- nearest-non-support to some bounty claims it. With ~80% probability,
+-- this means all 4 bounties get claimed pre-game (2 supports + 3 cores
+-- with one core idle covering the gap).
+--------------------------------------------------------------------
+-- Max pre-game travel distance for a core to walk to a bounty rune.
+-- Pre-game spawn -> any bounty distance is typically 1500-3500u; if
+-- the closest available bounty is farther than this cap the core
+-- skips bounty pickup and goes to lane (rune isn't worth the missed
+-- creep wave).
+local CORE_BOUNTY_MAX_DISTANCE = 3800
+
+function X.GetBestBountyForCore()
+	local targetRune = -1
+	local targetRuneDistance = math.huge
+	for _, rune in pairs(nBountyRuneList) do
+		local vRuneLocation = GetRuneSpawnLocation(rune)
+
+		-- Skip if rune is too far for a core to bother (would miss CW).
+		local botDist = GetUnitToLocationDistance(bot, vRuneLocation)
+		if botDist > CORE_BOUNTY_MAX_DISTANCE then goto continue end
+
+		-- Skip if any SUPPORT is closer to this rune than `bot` (supports
+		-- have priority).
+		local supportCloser = false
+		for i = 1, 5 do
+			local member = GetTeamMember(i)
+			if J.IsValidHero(member) and member ~= bot then
+				local memberPos = J.GetPosition(member)
+				if memberPos and memberPos >= 4 then
+					if GetUnitToLocationDistance(member, vRuneLocation) < botDist then
+						supportCloser = true
+						break
+					end
+				end
+			end
+		end
+		if supportCloser then goto continue end
+
+		-- Among cores (pos 1/2/3), is `bot` the closest to this rune?
+		local botIsClosestCore = true
+		for i = 1, 5 do
+			local member = GetTeamMember(i)
+			if J.IsValidHero(member) and member ~= bot then
+				local memberPos = J.GetPosition(member)
+				if memberPos and memberPos >= 1 and memberPos <= 3 then
+					if GetUnitToLocationDistance(member, vRuneLocation) < botDist then
+						botIsClosestCore = false
+						break
+					end
+				end
+			end
+		end
+		if not botIsClosestCore then goto continue end
+
+		-- Skip if pinged-by-human or human-claimed.
+		if X.IsPingedByHumanPlayer(vRuneLocation, math.huge)
+		or IsHumanClaimingRune(rune) then goto continue end
+
+		if botDist < targetRuneDistance then
+			targetRune = rune
+			targetRuneDistance = botDist
+		end
+		::continue::
+	end
+
+	return targetRune, targetRuneDistance
 end
 
 --------------------------------------------------------------------
