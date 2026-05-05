@@ -77,12 +77,77 @@ local function _universalDiveCap(desireFromInner)
 	return desireFromInner
 end
 
+-- ============================================================
+-- Universal attack-mode hysteresis (applies to ALL 127 heroes)
+--
+-- The "Earthshaker toggling back and forth at 3:53min" bug class:
+-- ATTACK mode desire is recomputed every tick from current enemy
+-- proximity. When an enemy hero hovers around the engagement
+-- threshold, the bot enters ATTACK -> walks toward target -> target
+-- backs away -> bot drops out of ATTACK -> walks back to wave -> target
+-- returns -> bot enters ATTACK again. Pure positional dither.
+--
+-- Cure: once we've been in ATTACK mode this tick, hold the desire
+-- elevated for ATTACK_HOLD_SEC even if the inner calculation drops.
+-- This gives the engagement at least one full attack swing's worth
+-- of commitment before we can back out.
+--
+-- Same caveats as the dive cap: returning a number forces a desire
+-- floor; returning nil falls through to Dota's default. We only
+-- ELEVATE here when (a) ATTACK was active in the last hold window,
+-- (b) we have a live target nearby, and (c) we're not already being
+-- suppressed by the dive cap. That last point matters: the dive cap
+-- runs first and returns 0.1; the hysteresis runs after and would
+-- otherwise overwrite that with 0.7. So hysteresis takes the dive
+-- cap's verdict as authoritative.
+-- ============================================================
+
+local ATTACK_HOLD_SEC = 1.5
+local _lastInAttackTime = -100
+local function _attackHoldHysteresis(desireFromCap)
+	-- Honor the dive cap's verdict — don't elevate desire when it
+	-- already dropped us to suppress a tower-dive.
+	if desireFromCap ~= nil and desireFromCap <= 0.15 then
+		return desireFromCap
+	end
+
+	-- Stamp last-attacking tick. GetActiveMode reflects the previous
+	-- tick's chosen mode, which is the right signal for "were we
+	-- attacking very recently?".
+	local mode = bot:GetActiveMode()
+	if mode == BOT_MODE_ATTACK then
+		_lastInAttackTime = DotaTime()
+	end
+
+	-- Within hold window AND have a viable target nearby => hold floor.
+	if DotaTime() - _lastInAttackTime < ATTACK_HOLD_SEC then
+		local tgt = bot:GetTarget()
+		if tgt ~= nil and not tgt:IsNull() and tgt:IsAlive()
+			and tgt:GetTeam() ~= bot:GetTeam()
+			and not tgt:IsInvulnerable()
+			and GetUnitToUnitDistance(bot, tgt) < 1200
+		then
+			-- Floor at HIGH (0.7). This loses to retreat (which can hit
+			-- 0.85+ at low HP) but wins against laning/farm/roam, so a
+			-- target-locked engagement stays committed.
+			return 0.7
+		end
+	end
+
+	return desireFromCap
+end
+
+local function _applyUniversalGuards(innerDesire)
+	local capped = _universalDiveCap(innerDesire)
+	return _attackHoldHysteresis(capped)
+end
+
 if local_mode_attack_generic ~= nil then
 	-- Override path: 9 specific heroes have their own override file.
-	-- Wrap its GetDesire with the universal cap so even those heroes
-	-- get the additional safety net.
+	-- Wrap its GetDesire with the universal cap + hold so even those
+	-- heroes get the additional safety net.
 	function GetDesire()
-		return _universalDiveCap(local_mode_attack_generic.GetDesire())
+		return _applyUniversalGuards(local_mode_attack_generic.GetDesire())
 	end
 	function Think() return local_mode_attack_generic.Think() end
 	function OnStart() return local_mode_attack_generic.OnStart() end
@@ -93,14 +158,16 @@ else
 	-- defining GetDesire here. When this returns VERYLOW, Dota picks a
 	-- different mode (retreat/defend/etc.) instead of attack.
 	--
-	-- Returning a high desire would force-enable attack — we don't want
-	-- that. Returning nil/non-number would cause assertion crashes. So
-	-- we ONLY return when actually suppressing. The default-attack-mode
-	-- behavior comes from Dota when GetDesire is absent or returns nil.
+	-- Two-stage logic:
+	--   1) Dive cap may drop desire to 0.1 to suppress tower dives.
+	--   2) Attack-hold may raise desire to 0.7 to prevent dither
+	--      (only when dive cap didn't already suppress).
+	-- If neither fires, return nil so Dota's default logic decides.
 	function GetDesire()
-		local capped = _universalDiveCap(nil)
-		if capped == 0.1 then return capped end
-		-- Otherwise let Dota's default-attack-mode internal logic decide.
+		local result = _applyUniversalGuards(nil)
+		-- Only return a number when we are actively overriding the engine.
+		-- nil means "use the default attack desire calc" — engine handles.
+		if result == 0.1 or result == 0.7 then return result end
 		return nil
 	end
 end
