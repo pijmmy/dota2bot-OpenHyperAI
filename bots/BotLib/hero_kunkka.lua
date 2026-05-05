@@ -401,6 +401,23 @@ function X.GetTowardsFountainLocation( unitLoc, distance )
 	return Vector( destination[1], destination[2] )
 end
 
+-- Ghost Ship cast helper: extrapolate target location to where the ship
+-- will actually crash. Ghost Ship has speed = 650 and a ~425 unit width.
+-- A target moving at 315 ms perpendicular to the ship's path will move
+-- ~500 units during a 1.5s travel — wider than the ship itself, so the
+-- knockback misses if we aim at the target's current position.
+-- Audit: hero_kunkka.lua ConsiderCombo1 / ConsiderCombo2 / ConsiderR.
+local GHOST_SHIP_SPEED = 650
+local function _kunkkaShipImpactLoc( npcTarget )
+	if not J.IsValidHero( npcTarget ) then return npcTarget:GetLocation() end
+	local dist = GetUnitToUnitDistance( npcTarget, bot )
+	-- Cap travel time at 2s (ship max distance / speed). Use 0.55 multiplier
+	-- because target reaction time + Kunkka's own face-toward offset ~30u
+	-- mean the ship lands somewhere between current and full extrapolation.
+	local travelTime = math.min( 2.0, math.max( 0.4, dist / GHOST_SHIP_SPEED ) )
+	return npcTarget:GetExtrapolatedLocation( travelTime * 0.55 )
+end
+
 --X船水
 function X.ConsiderCombo1()
 
@@ -429,7 +446,10 @@ function X.ConsiderCombo1()
 			and GetUnitToUnitDistance( npcTarget, bot ) > nCastRange/2
 			and GetUnitToUnitDistance( npcTarget, bot ) < nCastRange )
 		then
-			return BOT_ACTION_DESIRE_HIGH, npcTarget, J.GetFaceTowardDistanceLocation( npcTarget, 30 )
+			-- Ship lands at extrapolated location (target is X-marked back here
+			-- by Combo, so they're returning). Aiming at face-toward(30) makes
+			-- the ship miss when the target sidesteps during X's 4s window.
+			return BOT_ACTION_DESIRE_HIGH, npcTarget, _kunkkaShipImpactLoc( npcTarget )
 		end
 	end
 
@@ -462,7 +482,10 @@ function X.ConsiderCombo2()
 			and J.CanCastOnNonMagicImmune( npcTarget )
 			and GetUnitToUnitDistance( npcTarget, bot ) < nCastRange )
 		then
-			return BOT_ACTION_DESIRE_HIGH, npcTarget, npcTarget:GetLocation()
+			-- Combo2 (X-Ship): ship lands at extrapolated location, not
+			-- target's CURRENT location. With a 1.5s travel time and a 425u
+			-- width, an unextrapolated cast misses any moving target.
+			return BOT_ACTION_DESIRE_HIGH, npcTarget, _kunkkaShipImpactLoc( npcTarget )
 		end
 	end
 
@@ -694,11 +717,28 @@ function X.ConsiderR()
 	--团战AOE
 	if J.IsInTeamFight( bot, 1200 )
 	then
+		-- Lowered threshold from 3-AoE+2-hero to 2-AoE+2-hero. Ghost Ship's
+		-- knockback + slow + crash damage is strong enough vs 2 enemies
+		-- that the previous 3-cluster gate left it unfired in most fights.
+		-- FindAoELocation has a 0.8s cast-delay arg that approximates ship
+		-- travel; we ALSO extrapolate from a representative enemy to handle
+		-- moving clusters.
 		local locationAoE = bot:FindAoELocation( true, true, bot:GetLocation(), nCastRange * 0.8, nRadius, 0.8, 0 )
 		local hTrueHeroList = J.GetEnemyList( bot, 1200 )
-		if ( locationAoE.count >= 3 and #hTrueHeroList >= 2 )
+		if ( locationAoE.count >= 2 and #hTrueHeroList >= 2 )
 		then
-			return BOT_ACTION_DESIRE_MODERATE, locationAoE.targetloc
+			-- Pick a representative enemy near the AoE centroid and
+			-- extrapolate to where the ship will actually crash.
+			local impact = locationAoE.targetloc
+			for _, enemy in pairs( hTrueHeroList ) do
+				if J.IsValidHero( enemy )
+					and ( enemy:GetLocation() - locationAoE.targetloc ):Length2D() < nRadius
+				then
+					impact = _kunkkaShipImpactLoc( enemy )
+					break
+				end
+			end
+			return BOT_ACTION_DESIRE_HIGH, impact
 		end
 	end
 

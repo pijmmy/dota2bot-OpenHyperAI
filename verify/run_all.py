@@ -34,6 +34,11 @@ TESTS = [
     "test_attack_target_hysteresis.py",
     "test_hysteresis.py",
     "test_safezone.py",
+    "test_attack_hold.py",
+    "test_kunkka_ship.py",
+    "test_skywrath_harass_gate.py",
+    "test_support_farm_contention.py",
+    "test_team_roam_engage_override.py",
 ]
 
 def main():
