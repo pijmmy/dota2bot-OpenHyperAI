@@ -43,6 +43,7 @@ TESTS = [
     "test_retreat_reengage_hold.py",
     "test_human_kill_yield.py",
     "test_per_hero_anti_dive.py",
+    "test_skill_list_padding.py",
 ]
 
 def main():

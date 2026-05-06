@@ -75,6 +75,22 @@ function X.GetTalentList( bot )
 		end
 	end
 
+	-- Pad to the standard 8-talent count with a non-nil placeholder.
+	-- If GetTalentList runs before the engine has populated talent slots
+	-- (e.g. hero file loads while bot is still initializing), sTalentList
+	-- is shorter than the index hero files expect. Hero-file top-level
+	-- calls like:
+	--     local talent7 = bot:GetAbilityByName( sTalentList[7] )
+	-- then pass nil and the engine logs "Null ability name passed into
+	-- FindAbilityByName!" once per call. Affects every hero file that
+	-- references sTalentList[N] for N up to 7. Latest game logged 5,033
+	-- of these errors (~2,300 init spike + 250/min steady).
+	-- Placeholder name returns nil from GetAbilityByName silently.
+	while #sTalentList < 8
+	do
+		table.insert( sTalentList, "_oha_unused_talent_slot" )
+	end
+
 	return sTalentList
 
 end
@@ -118,6 +134,18 @@ function X.GetAbilityList( bot )
 			end
 		else
 			print('[WARN] It seems there is no ability on slot '..slot..' for '..unitName)
+		end
+	end
+
+	-- Pad indices 1..6 with a non-nil placeholder for any unfilled slot.
+	-- Same reason as GetTalentList: hero files reference sAbilityList[4],
+	-- [5], [6] from inside SkillsComplement (per-tick). When the slot is
+	-- missing (innate passive at slot 3/4 with the not-learnable+hidden
+	-- branch at line ~100, or no ult yet learned), sAbilityList[N] is nil
+	-- and GetAbilityByName(nil) logs the engine warning every tick.
+	for i = 1, 6 do
+		if sAbilityList[i] == nil then
+			sAbilityList[i] = "_oha_unused_ability_slot"
 		end
 	end
 
