@@ -117,11 +117,54 @@ end
 
 -- === existing functions, now reusing context ===
 
+-- Universal RETREAT-mode dive bias. Counterpart to the LANING dive cap
+-- in mode_laning_generic.lua. When the bot is standing in enemy tower
+-- range without an immortal frame, force RETREAT desire to MODERATE
+-- (0.5) so it wins against the LANING cap (0.1). This causes the bot
+-- to actually walk back to safety instead of standing still in the
+-- dive zone with all mode desires near zero.
+local function _retreatDiveBoost(desire)
+    if bot:HasModifier('modifier_abaddon_borrowed_time')
+       or bot:HasModifier('modifier_item_satanic_unholy')
+       or bot:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
+       or bot:HasModifier('modifier_dazzle_shallow_grave')
+       or bot:HasModifier('modifier_oracle_false_promise')
+       or bot:HasModifier('modifier_omniknight_guardian_angel')
+       or bot:IsAttackImmune()
+    then
+        return desire
+    end
+
+    local diving = false
+    if J and J.Safezone and J.Safezone.WouldDiveIfMovedTo then
+        local ok, dive = pcall(function()
+            return J.Safezone.WouldDiveIfMovedTo(bot, bot:GetLocation(), 0)
+        end)
+        if ok and dive then diving = true end
+    else
+        local towers = bot:GetNearbyTowers(750, true)
+        if towers and towers[1] and not towers[1]:IsNull() and towers[1]:IsAlive() then
+            local hp = bot:GetHealth() + (bot:GetHealthRegen() * 3.0)
+            if hp < 700 then diving = true end
+        end
+    end
+
+    if diving then
+        -- Floor at 0.5 so RETREAT beats laning's 0.1 cap. Existing
+        -- per-condition desires (low HP, etc.) above 0.5 still apply.
+        if desire == nil or type(desire) ~= "number" or desire < 0.5 then
+            return 0.5
+        end
+    end
+    return desire
+end
+
 function GetDesire()
     -- local cacheKey = 'GetRetreatDesire'..tostring(bot:GetPlayerID())
     -- local cachedVar = J.Utils.GetCachedVars(cacheKey, 0.35 * (1 + Customize.ThinkLess))
     -- if DotaTime() > 30 and cachedVar ~= nil then return cachedVar end
     local res = GetDesireHelper()
+    res = _retreatDiveBoost(res)
     -- EMA smoothing (alpha = 0.30): without this, retreat desire swings
     -- between BOT_MODE_DESIRE_NONE and HIGH/ABSOLUTE based on per-tick
     -- enemy/ally count flicker. Combined with mode_attack's existing

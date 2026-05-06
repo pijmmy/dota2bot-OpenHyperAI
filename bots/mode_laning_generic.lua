@@ -29,8 +29,53 @@ local isChangePosMessageDone     = false
 
 if Utils.BuggyHeroesDueToValveTooLazy[botName] then local_mode_laning_generic = dofile( GetScriptDirectory().."/FunLib/override_generic/mode_laning_generic" ) end
 
+-- Universal LANING-mode dive cap. The dispatcher's universal anti-dive
+-- in mode_attack_generic.lua only suppresses ATTACK mode desire — but
+-- pre-match positioning runs in LANING mode, and Dota's default LANING
+-- Think will happily walk a bot into enemy tower range. User report
+-- (latest game console.8799804509.log @ 0:46 prematch + 0:37 game time):
+-- "clockwerk dives the top tower" / "clockwerk and undying dive the top
+-- tower" — Clockwerk and Undying are NOT in the buggy-heroes list, so
+-- they use Dota's default lane Think with no anti-dive logic.
+--
+-- Cap LANING desire to 0.1 (VERYLOW) when the bot would dive without an
+-- immortal frame. The engine then picks RETREAT (or any other mode)
+-- over LANING, and the bot peels back from tower range.
+local function _laningDiveCap(desire)
+	-- Honor immortal frames (BT / Satanic / WK reincarnation / Shallow
+	-- Grave / False Promise / Guardian Angel / attack immune).
+	if bot:HasModifier('modifier_abaddon_borrowed_time')
+	   or bot:HasModifier('modifier_item_satanic_unholy')
+	   or bot:HasModifier('modifier_skeleton_king_reincarnation_scepter_active')
+	   or bot:HasModifier('modifier_dazzle_shallow_grave')
+	   or bot:HasModifier('modifier_oracle_false_promise')
+	   or bot:HasModifier('modifier_omniknight_guardian_angel')
+	   or bot:IsAttackImmune()
+	then
+		return desire
+	end
+
+	local diving = false
+	if J and J.Safezone and J.Safezone.WouldDiveIfMovedTo then
+		local ok, dive = pcall(function()
+			return J.Safezone.WouldDiveIfMovedTo(bot, bot:GetLocation(), 0)
+		end)
+		if ok and dive then diving = true end
+	else
+		local towers = bot:GetNearbyTowers(750, true)
+		if towers and towers[1] and not towers[1]:IsNull() and towers[1]:IsAlive() then
+			local hp = bot:GetHealth() + (bot:GetHealthRegen() * 3.0)
+			if hp < 700 then diving = true end
+		end
+	end
+
+	if diving then return 0.1 end
+	return desire
+end
+
 function GetDesire()
 	local res = GetDesireInner()
+	res = _laningDiveCap(res)
 	return J.Personality.ModulateDesire(bot, res, 'laning')
 end
 
