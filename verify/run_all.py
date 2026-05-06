@@ -44,6 +44,8 @@ TESTS = [
     "test_human_kill_yield.py",
     "test_per_hero_anti_dive.py",
     "test_skill_list_padding.py",
+    "test_bounty_dedupe.py",
+    "test_laning_dive_cap.py",
 ]
 
 def main():

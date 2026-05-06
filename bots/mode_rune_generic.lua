@@ -591,43 +591,82 @@ end
 --------------------------------------------------------------------
 -- GetBestBountyRune  (pre-game bounty-only picker)
 --
--- Picks the closest of the 4 bounty runes that:
---   - this bot is the closest ally to (so two supports don't dogpile
---     the same rune)
---   - hasn't been claimed by a human teammate
--- Returns (-1, math.huge) if none available.
+-- Computes the team's full support<->bounty assignment then returns
+-- THIS bot's pair. Each support gets a UNIQUE bounty (no double-claim).
 --
--- Used during DotaTime < 0 to assign each pos 4/5 support to a real
--- bounty rune location instead of the old fixed lane→rune mapping that
--- sent half the supports to river powerup spots (empty at 0:00).
+-- Algorithm:
+--   1. Collect all alive pos 4/5 supports, sort by playerID ascending.
+--   2. For each support in order, claim their closest unclaimed bounty
+--      (ties broken by rune ID).
+--   3. Return THIS bot's assignment.
+--
+-- Why the rebuild: the previous IsTheClosestSupport check used strict
+-- distance comparison without a tiebreak. At fountain spawn both
+-- supports are at the SAME location, so each thought "I'm closest to
+-- bounty X" for all 4 bounties, and both walked to the same one. User
+-- report (latest game console.8799804509.log @ 0:09): "noone gets the
+-- runes at start." Bounties were left for the enemy.
+--
+-- Used during DotaTime < 0 to assign each support a real bounty
+-- location.
 --------------------------------------------------------------------
 function X.GetBestBountyRune()
-	local targetRune = -1
-	local targetRuneDistance = math.huge
-	for _, rune in pairs(nBountyRuneList) do
-		local vRuneLocation = GetRuneSpawnLocation(rune)
+	-- Collect supports sorted by playerID for deterministic ordering.
+	local supports = {}
+	for i = 1, 5 do
+		local m = GetTeamMember(i)
+		if J.IsValidHero(m) then
+			local p = J.GetPosition(m)
+			if p and p >= 4 then
+				table.insert(supports, m)
+			end
+		end
+	end
+	table.sort(supports, function(a, b)
+		return a:GetPlayerID() < b:GetPlayerID()
+	end)
 
-		-- Only pos 4/5 supports compete for bounty pre-game (cores have
-		-- DESIRE_NONE for rune mode pre-game and walk to lane). Using
-		-- the all-allies IsTheClosestAlly here would let a geographically
-		-- closer carry block a support from claiming a bounty even
-		-- though the carry isn't going for it. Verified failure mode:
-		-- pos 1 spawns near bounty_1 by chance → IsTheClosestAlly says
-		-- pos 1 is closest → pos 5 picks no rune → both supports end up
-		-- with -1 → nobody picks bounty.
-		if X.IsTheClosestSupport(bot, vRuneLocation)
-		and not X.IsPingedByHumanPlayer(vRuneLocation, math.huge)
-		and not IsHumanClaimingRune(rune)
-		then
-			local dist = GetUnitToLocationDistance(bot, vRuneLocation)
-			if dist < targetRuneDistance then
-				targetRune = rune
-				targetRuneDistance = dist
+	-- Round-robin: each support claims their closest unclaimed bounty.
+	local claimed = {}
+	local myAssignment = nil
+	local myPID = bot:GetPlayerID()
+
+	for _, support in ipairs(supports) do
+		-- Build sorted list of (rune, dist) for this support.
+		local options = {}
+		for _, rune in pairs(nBountyRuneList) do
+			local loc = GetRuneSpawnLocation(rune)
+			-- Skip if pinged-by-human or human-claimed.
+			if not X.IsPingedByHumanPlayer(loc, math.huge)
+			and not IsHumanClaimingRune(rune) then
+				table.insert(options, {
+					rune = rune,
+					loc = loc,
+					dist = GetUnitToLocationDistance(support, loc),
+				})
+			end
+		end
+		table.sort(options, function(a, b)
+			if a.dist == b.dist then return a.rune < b.rune end
+			return a.dist < b.dist
+		end)
+
+		-- Claim the closest unclaimed.
+		for _, opt in ipairs(options) do
+			if not claimed[opt.rune] then
+				claimed[opt.rune] = true
+				if support:GetPlayerID() == myPID then
+					myAssignment = opt
+				end
+				break
 			end
 		end
 	end
 
-	return targetRune, targetRuneDistance
+	if myAssignment ~= nil then
+		return myAssignment.rune, myAssignment.dist
+	end
+	return -1, math.huge
 end
 
 --------------------------------------------------------------------
@@ -636,10 +675,21 @@ end
 -- Like IsTheClosestAlly but only considers pos 4/5 supports as
 -- competitors. Cores aren't in rune mode pre-game so they shouldn't
 -- block supports from claiming the closest bounty.
+--
+-- Tie-break by playerID: at fountain spawn, both supports are at the
+-- IDENTICAL location, so straight `<` on distance leaves both thinking
+-- they're "the closest" to the same rune. Both then walk to the same
+-- bounty. Result observed in latest game (console.8799804509.log,
+-- user report at 0:09): "noone gets the runes at start" — only one
+-- support actually picked up, and the other 3 bounties went unclaimed.
+-- With strict less-than on distance and a playerID tiebreak, equal
+-- distances deterministically resolve so each support claims a
+-- DIFFERENT bounty.
 --------------------------------------------------------------------
 function X.IsTheClosestSupport(hUnit, vLocation)
 	local targetAlly = hUnit
 	local targetAllyDistance = GetUnitToLocationDistance(hUnit, vLocation)
+	local hUnitPID = hUnit:GetPlayerID()
 	for i = 1, 5 do
 		local member = GetTeamMember(i)
 		if J.IsValidHero(member) and member ~= hUnit then
@@ -647,6 +697,13 @@ function X.IsTheClosestSupport(hUnit, vLocation)
 			if memberPos and memberPos >= 4 then
 				local memberDistance = GetUnitToLocationDistance(member, vLocation)
 				if memberDistance < targetAllyDistance then
+					targetAlly = member
+					targetAllyDistance = memberDistance
+				elseif memberDistance == targetAllyDistance
+					and member:GetPlayerID() < hUnitPID
+				then
+					-- Equal distance: lower playerID wins. Splits ties so
+					-- support pair doesn't both claim the same rune.
 					targetAlly = member
 					targetAllyDistance = memberDistance
 				end
