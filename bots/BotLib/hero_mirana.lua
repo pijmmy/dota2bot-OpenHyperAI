@@ -537,7 +537,7 @@ function X.ConsiderE()
 
 	
 	--攻击敌人
-	if J.IsGoingOnSomeone( bot ) 
+	if J.IsGoingOnSomeone( bot )
 		and not bot:HasModifier( 'modifier_mirana_leap_buff' )
 	then
 		if J.IsValidHero( botTarget )
@@ -550,19 +550,35 @@ function X.ConsiderE()
 			local enemyList = J.GetNearbyHeroes(botTarget,  900, false, BOT_MODE_NONE )
 			local allyList = J.GetNearbyHeroes(botTarget,  1300, true, BOT_MODE_NONE )
 			local aliveEnemyCount = J.GetNumOfAliveHeroes( true )
-			
+
 			if aliveEnemyCount <= 2
 				or #enemyList <= 1
 				or #enemyList <= #allyList
 				or J.WillKillTarget( botTarget, bot:GetAttackDamage() * 3, DAMAGE_TYPE_PHYSICAL, 2.0 )
 			then
-			
+				-- Anti-dive: Leap forward toward target. If target's location
+				-- is under enemy tower, Mirana leaps into tower range without
+				-- an immortal frame. Suppress unless cluster pays off (3+).
+				local _leapDest = botTarget:GetLocation()
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, _leapDest, 0)
+				   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+				   and not bot:HasModifier('modifier_item_satanic_unholy')
+				   and not bot:IsAttackImmune()
+				then
+					-- Allow the leap only if it's a cluster fight (3+ enemies
+					-- means knockback + arrow setup is worth a tower trade).
+					if #enemyList < 3 then
+						return BOT_ACTION_DESIRE_NONE
+					end
+				end
+
 				hCastTarget = botTarget
 				sCastMotive = 'E-进攻:'..J.Chat.GetNormName( hCastTarget )
 				return BOT_ACTION_DESIRE_HIGH, hCastTarget, sCastMotive
-				
-			end		
-	
+
+			end
+
 		end
 	end
 	

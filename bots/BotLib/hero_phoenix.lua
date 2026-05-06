@@ -304,6 +304,22 @@ function X.ConsiderIcarusDive()
         then
             if #tAllyHeroes >= #tEnemyHeroes + 1
             then
+                -- Anti-dive: Icarus Dive flies Phoenix to target's loc.
+                -- Without supernova up, it's a one-way trip if target is
+                -- under tower. User report: "I dove phoenix who came back
+                -- at me after retreating" — this aggressive dive logic
+                -- contributed. Suppress unless 3+ enemy cluster pays the
+                -- trade or supernova is available as an out.
+                if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0)
+                   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+                   and not bot:HasModifier('modifier_phoenix_supernova_hiding')
+                   and Supernova ~= nil and not Supernova:IsFullyCastable()
+                   and not bot:IsAttackImmune()
+                   and #tEnemyHeroes < 3
+                then
+                    return BOT_ACTION_DESIRE_NONE
+                end
                 bot.icarus_dive_engage = true
                 return BOT_ACTION_DESIRE_HIGH, botTarget:GetLocation()
             end

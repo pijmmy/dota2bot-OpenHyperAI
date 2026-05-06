@@ -444,6 +444,19 @@ function X.ConsiderSnowball()
             if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
             and #nInRangeAlly >= #nInRangeEnemy
             then
+                -- Anti-dive: Snowball lands Tusk + ally riders at the
+                -- target's position. If target is under tower, the whole
+                -- snowball commits into tower range. Skip unless the cluster
+                -- (3+) makes the dive payoff worthwhile.
+                if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, strongestTarget:GetLocation(), 0)
+                   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+                   and not bot:HasModifier('modifier_item_satanic_unholy')
+                   and not bot:IsAttackImmune()
+                   and #nInRangeEnemy < 3
+                then
+                    return BOT_ACTION_DESIRE_NONE, nil
+                end
                 return BOT_ACTION_DESIRE_HIGH, strongestTarget
             end
 		end

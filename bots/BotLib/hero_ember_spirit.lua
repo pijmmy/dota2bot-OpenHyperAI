@@ -347,6 +347,19 @@ function X.ConsiderSleightOfFist()
 			if nInRangeAlly ~= nil and nInRangeEnemy ~= nil
 			and ((#nInRangeAlly >= #nInRangeEnemy) or (#nInRangeEnemy > #nInRangeAlly and J.WeAreStronger(bot, 1000)))
 			then
+				-- Anti-dive: Sleight of Fist warps Ember to enemy locations
+				-- across the AoE — meaning Ember can land in tower range
+				-- mid-cast. Suppress unless cluster (3+) pays the dive
+				-- trade or borrowed/satanic-style immortal frame is up.
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0)
+				   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+				   and not bot:HasModifier('modifier_item_satanic_unholy')
+				   and not bot:IsAttackImmune()
+				   and #nInRangeEnemy < 3
+				then
+					return BOT_ACTION_DESIRE_NONE, 0
+				end
 				return BOT_ACTION_DESIRE_HIGH, botTarget:GetLocation()
 			end
 		end

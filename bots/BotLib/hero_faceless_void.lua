@@ -224,6 +224,22 @@ function X.ConsiderTimeWalk()
 			and IsLocationPassable(loc)
 			and not J.IsLocationInArena(loc, 600)
 			then
+				-- Anti-dive: Time Walk lands FV at `loc`. If `loc` is under
+				-- enemy tower without an immortal frame, FV commits to a
+				-- one-way trip. The laning-phase guard at line 231 handles
+				-- early game; the post-laning branch had none. Adding it
+				-- now guards the whole game. Cluster fight (3+ enemies)
+				-- pays the dive trade.
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, loc, 0)
+				   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+				   and not bot:HasModifier('modifier_item_satanic_unholy')
+				   and not bot:HasModifier('modifier_faceless_void_chronosphere')
+				   and not bot:IsAttackImmune()
+				   and #nInRangeEnemy < 3
+				then
+					return BOT_ACTION_DESIRE_NONE, 0
+				end
 				if GetUnitToLocationDistance(bot, loc) > bot:GetAttackRange() * 2
 				then
 					if J.IsInLaningPhase()

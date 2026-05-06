@@ -316,12 +316,26 @@ function X.ConsiderQ()
 			and J.IsInRange( bot, botTarget, 400 )
 		then
 			local enemyLocation = botTarget:GetExtrapolatedLocation( nDelay )
-			
+
 			if J.GetLocationToLocationDistance( vCastLocation, enemyLocation ) < nRadius - 50
 			then
+				-- Anti-dive: Pounce travels forward in Slark's facing dir,
+				-- typically landing him AT the target. If target is under
+				-- tower, Slark commits into tower without immortal frame.
+				-- Slark has Shadow Dance for emergency, but Q before R is
+				-- a one-way commit.
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, botTarget:GetLocation(), 0)
+				   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+				   and not bot:HasModifier('modifier_slark_shadow_dance')
+				   and not bot:HasModifier('modifier_item_satanic_unholy')
+				   and not bot:IsAttackImmune()
+				then
+					return BOT_ACTION_DESIRE_NONE
+				end
 				hCastTarget = botTarget
 				sCastMotive = 'Q-攻击:'..J.Chat.GetNormName( hCastTarget )
-				return BOT_ACTION_DESIRE_HIGH, sCastMotive			
+				return BOT_ACTION_DESIRE_HIGH, sCastMotive
 			end
 		end
 	end

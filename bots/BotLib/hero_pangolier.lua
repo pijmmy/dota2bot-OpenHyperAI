@@ -502,6 +502,20 @@ function X.ConsiderShieldCrash()
             local vJumpLocation = weakestTarget:GetLocation()
             if IsLocationPassable(vJumpLocation)
             then
+                -- Anti-dive: Shield Crash mid-Rolling-Thunder lands Pango at
+                -- jumpLocation. If that's under tower without immortal frame,
+                -- it's a one-way commit. Cluster (3+) carve-out for fights
+                -- where the AOE damage justifies the trade.
+                local _enemiesAtJump = J.GetEnemiesNearLoc(vJumpLocation, nRadius)
+                if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, vJumpLocation, 0)
+                   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+                   and not bot:HasModifier('modifier_item_satanic_unholy')
+                   and not bot:IsAttackImmune()
+                   and (_enemiesAtJump == nil or #_enemiesAtJump < 3)
+                then
+                    return BOT_ACTION_DESIRE_NONE
+                end
                 return BOT_ACTION_DESIRE_HIGH
             end
         end
@@ -520,6 +534,17 @@ function X.ConsiderShieldCrash()
             and #nInRangeAlly >= #nTargetInRangeAlly
             and bot:IsFacingLocation(weakestTarget:GetLocation(), 30)
             then
+                -- Anti-dive: same as gyroshell branch — Shield Crash AoE
+                -- propels Pango forward into target area.
+                if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+                   and J.Safezone.WouldDiveIfMovedTo(bot, weakestTarget:GetLocation(), 0)
+                   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+                   and not bot:HasModifier('modifier_item_satanic_unholy')
+                   and not bot:IsAttackImmune()
+                   and #nTargetInRangeAlly < 3
+                then
+                    return BOT_ACTION_DESIRE_NONE
+                end
                 return BOT_ACTION_DESIRE_HIGH
             end
         end

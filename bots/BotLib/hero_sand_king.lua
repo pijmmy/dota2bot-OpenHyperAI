@@ -292,6 +292,19 @@ function X.ConsiderQ()
 			if nSkillLV >= 2 or nMP > 0.68 or J.GetHP( botTarget ) < 0.38
 			then
 				nTargetLocation = botTarget:GetLocation()
+				-- Anti-dive: Burrowstrike skewers Sand King forward to the
+				-- target's location. If target is under their tower, SK
+				-- commits into tower range. The dispatcher's universal
+				-- dive cap drops ATTACK desire next tick — but SK is
+				-- already there. Need ability-level guard.
+				if J.Safezone and J.Safezone.WouldDiveIfMovedTo
+				   and J.Safezone.WouldDiveIfMovedTo(bot, nTargetLocation, 0)
+				   and not bot:HasModifier('modifier_abaddon_borrowed_time')
+				   and not bot:HasModifier('modifier_item_satanic_unholy')
+				   and not bot:IsAttackImmune()
+				then
+					return BOT_ACTION_DESIRE_NONE, nil
+				end
 				return BOT_ACTION_DESIRE_HIGH, nTargetLocation, 'Q-攻击:'..J.Chat.GetNormName( botTarget )
 			end
 		end
